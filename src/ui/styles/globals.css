@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: 55 19 236;
+    /* #3713ec */
+    --color-background-light: 246 246 248;
+    /* #f6f6f8 */
+    --color-background-dark: 19 16 34;
+    /* #131022 */
+    --color-surface-dark: 30 27 46;
+    /* #1e1b2e */
+    --color-surface-light: 255 255 255;
+    /* #ffffff */
+    --color-glass-border: 255 255 255;
+    /* Opacity handled in utility */
+  }
+
+  body {
+    @apply bg-white dark:bg-background-dark text-slate-900 dark:text-white font-sans antialiased selection:bg-primary selection:text-white overflow-hidden;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3b54;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555070;
+}
