@@ -22,7 +22,7 @@ pub fn run() {
             let _tray = tauri::tray::TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&tray_menu)
-                .on_menu_event(|app, event| {
+                .on_menu_event(|app: &tauri::AppHandle, event| {
                     match event.id.as_ref() {
                         "show" => {
                             let window = app.get_webview_window("main").unwrap();
