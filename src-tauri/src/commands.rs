@@ -6,12 +6,13 @@ pub async fn start_download(
     app: AppHandle,
     state: State<'_, DownloadManager>,
     url: String,
+    title: String,
     path: Option<String>,
     format_spec: Option<String>,
     cookies: Option<String>,
 ) -> Result<String, String> {
     let id = uuid::Uuid::new_v4().to_string();
-    state.start_download(app, url, id.clone(), path, format_spec, cookies);
+    state.start_download(app, url, id.clone(), title, path, format_spec, cookies);
     Ok(id)
 }
 
@@ -26,13 +27,21 @@ pub async fn get_video_metadata(
 
 #[tauri::command]
 pub async fn cancel_download(
-    _state: State<'_, DownloadManager>,
-    _id: String,
+    state: State<'_, DownloadManager>,
+    id: String,
 ) -> Result<(), String> {
-    // Implement cancellation logic here (requires storing Child process)
-    // For now, allow the frontend to clear the UI state.
-    // The backend process kill implementation is pending proper Child storage.
-    Ok(())
+    if state.cancel_download(&id) {
+        Ok(())
+    } else {
+        Err("Task not found or already terminated".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn list_downloads(
+    state: State<'_, DownloadManager>,
+) -> Result<Vec<crate::download::DownloadProgressPayload>, String> {
+    Ok(state.get_tasks())
 }
 
 #[tauri::command]

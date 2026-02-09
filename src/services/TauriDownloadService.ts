@@ -6,9 +6,10 @@ export class TauriDownloadService implements IDownloadService {
         return await invoke<VideoMetadata>("get_video_metadata", { url });
     }
 
-    async startDownload(url: string, options?: { path?: string | null, format?: string | null, cookies?: string | null }): Promise<string> {
+    async startDownload(url: string, options: { title: string, path?: string | null, format?: string | null, cookies?: string | null }): Promise<string> {
         return await invoke<string>("start_download", {
             url,
+            title: options.title,
             path: options?.path,
             formatSpec: options?.format,
             cookies: options?.cookies

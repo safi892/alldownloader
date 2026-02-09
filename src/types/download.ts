@@ -1,9 +1,12 @@
 export type DownloadStatus =
     | 'queued'
+    | 'preparing'
     | 'downloading'
     | 'paused'
+    | 'merging'
     | 'completed'
-    | 'error';
+    | 'error'
+    | 'cancelled';
 
 export type DownloadFormat = 'video' | 'audio';
 
@@ -23,16 +26,21 @@ export interface Download {
     thumbnail?: string;
     duration?: number;
     totalSize?: string;
+    downloadedBytes?: number;
 }
 
 // Emitted from Backend to Frontend
 export interface DownloadProgressPayload {
     id: string;
     progress: number;
-    speed: string;
-    eta: string;
+    speed: number | null;     // Bytes per second
+    eta: number | null;       // Seconds
     status: DownloadStatus;
-    total_size?: string;
+    total_size: number | null; // Total bytes
+    downloaded_bytes: number | null;
+    can_retry?: boolean;
+    error_message?: string;
+    version: number;
 }
 
 export interface VideoFormat {
@@ -68,7 +76,7 @@ export interface VideoMetadata {
 
 export interface IDownloadService {
     getVideoMetadata(url: string): Promise<VideoMetadata>;
-    startDownload(url: string, options?: { path?: string | null, format?: string | null, cookies?: string | null }): Promise<string>;
+    startDownload(url: string, options: { title: string, path?: string | null, format?: string | null, cookies?: string | null }): Promise<string>;
     pauseDownload(id: string): Promise<void>;
     resumeDownload(id: string): Promise<void>;
     cancelDownload(id: string): Promise<void>;

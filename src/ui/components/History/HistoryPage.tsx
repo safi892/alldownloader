@@ -174,12 +174,29 @@ export const HistoryPage = () => {
                                             <span className="text-white font-medium truncate w-full" title={task.title}>{task.title || task.url}</span>
                                             <div className="flex items-center gap-2 text-xs text-gray-500">
                                                 <span className={cn(task.status === 'error' ? "text-red-400" : "text-green-400 capitalize")}>{task.status}</span>
+
+                                                {/* History Platform Badge */}
+                                                {siteInfo.name !== 'Unknown' && (
+                                                    <div
+                                                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 border border-white/5 text-[9px] font-bold uppercase tracking-tight"
+                                                        style={{ color: siteInfo.color, borderColor: `${siteInfo.color}22` }}
+                                                    >
+                                                        {siteInfo.name}
+                                                    </div>
+                                                )}
+
                                                 <span>•</span>
                                                 <span>{task.format.toUpperCase()}</span>
                                                 {task.formatSpec && (
                                                     <>
                                                         <span>•</span>
                                                         <span>{task.formatSpec}</span>
+                                                    </>
+                                                )}
+                                                {task.totalSize && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span className="font-mono">{task.totalSize}</span>
                                                     </>
                                                 )}
                                             </div>

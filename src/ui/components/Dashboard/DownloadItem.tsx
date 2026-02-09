@@ -4,7 +4,7 @@ import { cn } from "@/utils/cn";
 import { Button } from "@/ui/primitives/Button";
 import { Download } from "@/types/download";
 import { useDownloadStore } from "@/state/useDownloadStore";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { getSiteInfo } from "@/utils/siteUtils";
 
 interface DownloadItemProps {
@@ -32,6 +32,10 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
     const isActive = task.status === 'downloading';
     const isCompleted = task.status === 'completed';
     const isError = task.status === 'error';
+    const isPreparing = task.status === 'preparing';
+    const isMerging = task.status === 'merging';
+    const isCancelled = task.status === 'cancelled';
+    const isTerminal = isCompleted || isError || isCancelled;
 
     return (
         <motion.div
@@ -105,7 +109,14 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                                     <RotateCcw size={16} />
                                 </Button>
                             )}
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-red-400 hover:bg-red-500/20" onClick={() => cancelTask(task.id)} aria-label="Cancel Download">
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-gray-400 hover:text-red-400 hover:bg-red-500/20"
+                                onClick={() => cancelTask(task.id)}
+                                aria-label="Cancel Download"
+                                disabled={isTerminal}
+                            >
                                 <X size={16} />
                             </Button>
                         </div>
@@ -113,29 +124,75 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
 
                     {/* Meta */}
                     <div className="flex items-center gap-3 text-xs text-[#a19db9]">
-                        <span className="capitalize">{task.status}</span>
-                        {task.speed && (
+                        <span className={cn(
+                            "capitalize font-medium",
+                            isPreparing && "text-blue-400",
+                            isMerging && "text-purple-400",
+                            isCompleted && "text-green-400",
+                            isError && "text-red-400",
+                            isCancelled && "text-gray-500"
+                        )}>
+                            {task.status}
+                        </span>
+
+                        {/* Platform Badge */}
+                        <AnimatePresence>
+                            {task.status !== 'queued' && siteInfo.name !== 'Unknown' && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.8, x: -10 }}
+                                    animate={{ opacity: 1, scale: 1, x: 0 }}
+                                    exit={{ opacity: 0, scale: 0.8 }}
+                                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/10"
+                                    style={{ borderColor: `${siteInfo.color}33` }}
+                                >
+                                    {siteInfo.logoUrl && (
+                                        <img src={siteInfo.logoUrl} alt="" className="size-3 object-contain" />
+                                    )}
+                                    <span
+                                        className="text-[10px] font-bold uppercase tracking-wider"
+                                        style={{ color: siteInfo.color }}
+                                    >
+                                        {siteInfo.name}
+                                    </span>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                        {/* Video Size (Permanent) */}
+                        {task.totalSize && task.totalSize !== '-' && (
                             <>
                                 <span className="size-1 rounded-full bg-[#3f3b54]" />
-                                <span className="text-white font-mono">{task.speed}</span>
+                                <span className="flex gap-1.5 items-center">
+                                    <span className="opacity-50">Size:</span>
+                                    <span className="text-white font-mono">{task.totalSize}</span>
+                                </span>
                             </>
                         )}
-                        {task.eta && (
+
+                        {/* ETA & Speed (Transient - Only when active) */}
+                        {isActive && task.eta && task.eta !== '-' && (
                             <>
                                 <span className="size-1 rounded-full bg-[#3f3b54]" />
-                                <span>ETA: {task.eta}</span>
+                                <span className="flex gap-1.5 items-center text-primary group-hover:text-white transition-colors">
+                                    <span className="opacity-50">ETA:</span>
+                                    <span className="font-mono">{task.eta}</span>
+                                </span>
                             </>
                         )}
-                        {task.totalSize && (
+
+                        {isActive && (
                             <>
                                 <span className="size-1 rounded-full bg-[#3f3b54]" />
-                                <span>{task.totalSize}</span>
+                                <span className="flex gap-1.5 items-center">
+                                    <span className="opacity-50">Speed:</span>
+                                    <span className="text-white font-mono">{task.speed || '-'}</span>
+                                </span>
                             </>
                         )}
+
                         {isError && (
                             <>
                                 <span className="size-1 rounded-full bg-[#3f3b54]" />
-                                <span className="text-red-400">{task.error}</span>
+                                <span className="text-red-400 font-medium truncate max-w-[150px]">{task.error}</span>
                             </>
                         )}
                     </div>
@@ -155,9 +212,11 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                                     "h-full rounded-full relative transition-all duration-300",
                                     isCompleted ? "bg-green-500" : "bg-gradient-to-r from-primary to-purple-500",
                                     isPaused && "opacity-50 grayscale",
-                                    isError && "bg-red-500"
+                                    isError && "bg-red-500",
+                                    isCancelled && "bg-gray-700",
+                                    (isPreparing || isMerging) && "animate-pulse w-full bg-blue-500/50"
                                 )}
-                                style={{ width: `${task.progress}%` }}
+                                style={{ width: (isPreparing || isMerging) ? '100%' : `${task.progress}%` }}
                             >
                                 {isActive && (
                                     <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/50 animate-pulse" />
@@ -178,6 +237,7 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
         prev.task.progress === next.task.progress &&
         prev.task.status === next.task.status &&
         prev.task.speed === next.task.speed &&
-        prev.task.eta === next.task.eta
+        prev.task.eta === next.task.eta &&
+        prev.task.totalSize === next.task.totalSize
     );
 });

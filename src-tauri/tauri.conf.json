@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "vidflow-desktop",
-        "width": 800,
-        "height": 600
+        "title": "VidFlow",
+        "width": 1200,
+        "height": 810,
+        "minWidth": 900,
+        "minHeight": 600
       }
     ],
     "security": {

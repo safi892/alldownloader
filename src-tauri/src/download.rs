@@ -1,21 +1,79 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
 use std::sync::{Arc, Mutex};
 use std::io::Write;
 use std::fs;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Runtime, Manager};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
+#[cfg(mobile)]
+pub type Child = (); 
+#[cfg(not(mobile))]
+pub use tauri_plugin_shell::process::CommandChild as Child;
+use thiserror::Error;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "lowercase")] // active, paused, error, etc
+#[derive(Error, Debug)]
+pub enum DownloadError {
+    #[error("Failed to execute yt-dlp: {0}")]
+    ProcessSpawn(String),
+    #[error("yt-dlp failed: {0}")]
+    ProcessExecution(String),
+    #[error("JSON parsing failed: {0}")]
+    JsonParsing(String),
+    #[error("File operation failed: {0}")]
+    FileOperation(String),
+    #[error("Download cancelled by user")]
+    Cancelled,
+}
+
+impl DownloadError {
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            DownloadError::ProcessSpawn(_) => true,
+            DownloadError::ProcessExecution(err) => {
+                // Heuristic: network errors are usually retryable
+                err.contains("network") || err.contains("connection") || err.contains("HTTP Error")
+            },
+            _ => false,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum DownloadStatus {
     Queued,
+    Preparing,
     Downloading,
     Paused,
+    Merging,
     Completed,
     Error,
+    Cancelled,
+}
+
+impl DownloadStatus {
+    pub fn can_transition_to(&self, next: &DownloadStatus) -> bool {
+        match (self, next) {
+            (DownloadStatus::Queued, DownloadStatus::Preparing) => true,
+            (DownloadStatus::Queued, DownloadStatus::Cancelled) => true,
+            (DownloadStatus::Preparing, DownloadStatus::Downloading) => true,
+            (DownloadStatus::Preparing, DownloadStatus::Error) => true,
+            (DownloadStatus::Preparing, DownloadStatus::Cancelled) => true,
+            (DownloadStatus::Downloading, DownloadStatus::Merging) => true,
+            (DownloadStatus::Downloading, DownloadStatus::Paused) => true,
+            (DownloadStatus::Downloading, DownloadStatus::Completed) => true,
+            (DownloadStatus::Downloading, DownloadStatus::Error) => true,
+            (DownloadStatus::Downloading, DownloadStatus::Cancelled) => true,
+            (DownloadStatus::Paused, DownloadStatus::Downloading) => true,
+            (DownloadStatus::Paused, DownloadStatus::Cancelled) => true,
+            (DownloadStatus::Merging, DownloadStatus::Completed) => true,
+            (DownloadStatus::Merging, DownloadStatus::Error) => true,
+            (DownloadStatus::Merging, DownloadStatus::Cancelled) => true,
+            // Terminal states stay terminal unless retried (which creates a new task or reset)
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,30 +114,114 @@ pub struct VideoMetadata {
 pub struct DownloadProgressPayload {
     pub id: String,
     pub progress: f64,
-    pub speed: String,
-    pub eta: String,
+    pub speed: Option<u64>,
+    pub eta: Option<u64>,
     pub status: DownloadStatus,
-    pub total_size: Option<String>,
+    pub total_size: Option<u64>,
+    pub downloaded_bytes: Option<u64>,
+    pub can_retry: Option<bool>,
+    pub error_message: Option<String>,
+    pub version: u32, // IPC Versioning
 }
 
 pub struct DownloadManager {
-    // Map<download_id, process_id_or_handle>
-    // Since we use tauri_plugin_shell, we might need to store the Child process.
-    // However, the plugin doesn't easily expose the raw Child in a way we can 'kill' later generically without keeping the Child struct.
-    // For now, let's just store active task IDs to prevent duplicates, and we'll implement cancellation if the plugin supports it (it returns a handle).
-    active_downloads: Arc<Mutex<HashMap<String, ()>>>, 
+    // Authoritative store of all tasks
+    pub tasks: Arc<Mutex<HashMap<String, Arc<Mutex<DownloadTask>>>>>,
+    pub max_concurrent: usize,
 }
+
+pub struct DownloadTask {
+    pub id: String,
+    pub url: String,
+    pub title: String,
+    pub status: DownloadStatus,
+    pub progress: f64,
+    pub speed: Option<u64>,
+    pub eta: Option<u64>,
+    pub total_size: Option<u64>,
+    pub downloaded_bytes: Option<u64>,
+    pub child: Option<Child>,
+    pub final_path: Option<std::path::PathBuf>,
+}
+
+impl DownloadTask {
+    pub fn new(id: String, url: String, title: String) -> Self {
+        Self {
+            id,
+            url,
+            title,
+            status: DownloadStatus::Queued,
+            progress: 0.0,
+            speed: None,
+            eta: None,
+            total_size: None,
+            downloaded_bytes: None,
+            child: None,
+            final_path: None,
+        }
+    }
+
+    pub fn transition(&mut self, next: DownloadStatus) -> bool {
+        if self.status.can_transition_to(&next) || self.status == next {
+            self.status = next;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+pub async fn verify_media_integrity<R: Runtime>(app: &AppHandle<R>, path: &std::path::Path) -> Result<(), String> {
+    // 1. Basic check: Existence and non-zero size
+    if !path.exists() {
+        return Err("Output file does not exist".to_string());
+    }
+    let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
+    if metadata.len() == 0 {
+        return Err("Output file is empty".to_string());
+    }
+
+    // 2. Rigorous check: ffprobe container validity
+    let output = app.shell().command("ffprobe")
+        .args(["-v", "error", "-show_format", "-show_streams", &path.to_string_lossy()])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute ffprobe: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(format!("Corrupt media container detected: {}", stderr));
+    }
+
+    Ok(())
+}
+
+pub struct Guardrails {
+    pub max_concurrent_downloads: usize,
+    pub max_playlist_items: u32,
+    pub default_fragments: u32,
+    pub ipc_version: u32,
+}
+
+pub const SYSTEM_GUARDRAILS: Guardrails = Guardrails {
+    max_concurrent_downloads: 2,
+    max_playlist_items: 100,
+    default_fragments: 8,
+    ipc_version: 1,
+};
 
 impl DownloadManager {
     pub fn new() -> Self {
         Self {
-            active_downloads: Arc::new(Mutex::new(HashMap::new())),
+            tasks: Arc::new(Mutex::new(HashMap::new())),
+            max_concurrent: SYSTEM_GUARDRAILS.max_concurrent_downloads,
         }
     }
 
     pub async fn get_video_metadata<R: Runtime>(&self, app: AppHandle<R>, url: String) -> Result<VideoMetadata, String> {
+        let max_items = SYSTEM_GUARDRAILS.max_playlist_items.to_string();
         let output = app.shell().command("yt-dlp")
-            .args(["-J", "--flat-playlist", &url]) // flat-playlist is faster for large lists
+            .args(["-J", "--flat-playlist", "--no-warnings", "--playlist-end", &max_items, &url])
             .output()
             .await
             .map_err(|e| format!("Failed to execute yt-dlp: {}", e))?;
@@ -160,164 +302,410 @@ impl DownloadManager {
         })
     }
 
-    pub fn start_download<R: Runtime>(&self, app: AppHandle<R>, url: String, id: String, path: Option<String>, format_spec: Option<String>, cookies: Option<String>) {
-        let active_downloads = self.active_downloads.clone();
+    pub fn cancel_download(&self, id: &str) -> bool {
+        let tasks = self.tasks.lock().unwrap();
+        if let Some(task_arc) = tasks.get(id) {
+            let mut task = task_arc.lock().unwrap();
+            if let Some(child) = task.child.take() {
+                #[cfg(windows)]
+                {
+                    let pid = child.pid();
+                    // Taskkill /F /T /PID: Force, Tree, PID
+                    let _ = std::process::Command::new("taskkill")
+                        .args(["/F", "/T", "/PID", &pid.to_string()])
+                        .spawn();
+                }
+                #[cfg(not(windows))]
+                {
+                    let _ = child.kill();
+                }
+                let _ = task.transition(DownloadStatus::Cancelled);
+                true
+            } else if task.status == DownloadStatus::Queued {
+                let _ = task.transition(DownloadStatus::Cancelled);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn cleanup_all(&self) {
+        let tasks = self.tasks.lock().unwrap();
+        for (_, task_arc) in tasks.iter() {
+            let mut task = task_arc.lock().unwrap();
+            if let Some(child) = task.child.take() {
+                #[cfg(windows)]
+                {
+                    let pid = child.pid();
+                    let _ = std::process::Command::new("taskkill")
+                        .args(["/F", "/T", "/PID", &pid.to_string()])
+                        .spawn();
+                }
+                #[cfg(not(windows))]
+                {
+                    let _ = child.kill();
+                }
+            }
+        }
+    }
+
+    pub fn get_tasks(&self) -> Vec<DownloadProgressPayload> {
+        let tasks = self.tasks.lock().unwrap();
+        tasks.values().map(|t| {
+            let task = t.lock().unwrap();
+            DownloadProgressPayload {
+                id: task.id.clone(),
+                progress: task.progress,
+                speed: task.speed,
+                eta: task.eta,
+                status: task.status.clone(),
+                total_size: task.total_size,
+                downloaded_bytes: task.downloaded_bytes,
+                can_retry: Some(task.status == DownloadStatus::Error),
+                error_message: None,
+                version: SYSTEM_GUARDRAILS.ipc_version,
+            }
+        }).collect()
+    }
+
+    pub fn start_download<R: Runtime>(&self, app: AppHandle<R>, url: String, id: String, title: String, path: Option<String>, format_spec: Option<String>, cookies: Option<String>) {
+        let _tasks_clone = self.tasks.clone();
         
         {
-            let mut map = active_downloads.lock().unwrap();
+            let mut map = self.tasks.lock().unwrap();
             if map.contains_key(&id) {
-                return; // Already active
+                return; // Already exists
             }
-            map.insert(id.clone(), ());
+            map.insert(id.clone(), Arc::new(Mutex::new(DownloadTask::new(id.clone(), url.clone(), title))));
         }
 
-        tauri::async_runtime::spawn(async move {
-            let mut args = vec![
-                "--newline",
-                "-N", "8",
-                "--progress-template",
-                "%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(progress._total_bytes_estimate_str)s",
-            ];
+        let _app_clone = app.clone();
+        let _download_manager = app.state::<DownloadManager>();
+        
+        // Signal the queue to process
+        self.process_queue(app, path, format_spec, cookies);
+    }
 
-            // Cookie Handling
-            let mut cookie_file_path = None;
-            if let Some(cookie_data) = cookies {
-                let temp_dir = std::env::temp_dir();
-                let file_path = temp_dir.join(format!("vidflow_cookies_{}.txt", id));
-                if let Ok(mut file) = fs::File::create(&file_path) {
-                    if file.write_all(cookie_data.as_bytes()).is_ok() {
-                        cookie_file_path = Some(file_path.to_string_lossy().to_string());
+    pub fn process_queue<R: Runtime>(&self, app: AppHandle<R>, path: Option<String>, format_spec: Option<String>, cookies: Option<String>) {
+        let tasks_arc = self.tasks.clone();
+        let max_concurrent = self.max_concurrent;
+
+        let active_count = {
+            let tasks = tasks_arc.lock().unwrap();
+            tasks.values().filter(|t| {
+                let task = t.lock().unwrap();
+                matches!(task.status, DownloadStatus::Preparing | DownloadStatus::Downloading | DownloadStatus::Merging)
+            }).count()
+        };
+
+        if active_count >= max_concurrent {
+            return;
+        }
+
+        let next_task_id = {
+            let tasks = tasks_arc.lock().unwrap();
+            tasks.iter().find(|(_, t)| {
+                let task = t.lock().unwrap();
+                task.status == DownloadStatus::Queued
+            }).map(|(id, _)| id.clone())
+        };
+
+        if let Some(id) = next_task_id {
+            let task_ref = {
+                let tasks = tasks_arc.lock().unwrap();
+                tasks.get(&id).unwrap().clone()
+            };
+
+            {
+                let mut task = task_ref.lock().unwrap();
+                if !task.transition(DownloadStatus::Preparing) {
+                    return;
+                }
+            }
+
+            // Start the actual download in a spawn
+            let tasks_inner = tasks_arc.clone();
+            let app_inner = app.clone();
+            let url_inner = {
+                let task = task_ref.lock().unwrap();
+                task.url.clone()
+            };
+
+            tauri::async_runtime::spawn(async move {
+                let fragments = SYSTEM_GUARDRAILS.default_fragments.to_string();
+                let mut args = vec![
+                    "--newline",
+                    "-N", &fragments,
+                    "--progress-template",
+                    "%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s",
+                    "--no-warnings",
+                ];
+
+                // Cookie Handling
+                let mut cookie_file_path = None;
+                if let Some(ref cookie_data) = cookies {
+                    let temp_dir = std::env::temp_dir();
+                    let file_path = temp_dir.join(format!("vidflow_cookies_{}.txt", id));
+                    if let Ok(mut file) = fs::File::create(&file_path) {
+                        if file.write_all(cookie_data.as_bytes()).is_ok() {
+                            cookie_file_path = Some(file_path.to_string_lossy().to_string());
+                        }
                     }
                 }
-            }
 
-            let cookie_arg;
-            if let Some(ref path) = cookie_file_path {
-                cookie_arg = path.clone();
-                args.push("--cookies");
-                args.push(&cookie_arg);
-            }
-
-            // If it's a playlist, we want to download the whole thing
-            // yt-dlp does this by default if we don't pass --no-playlist.
-
-            // Metadata & Thumbnail
-            args.push("--add-metadata");
-            args.push("--embed-thumbnail");
-
-            // Path logic
-            let path_string;
-            if let Some(p) = &path {
-                path_string = p.clone();
-                args.push("-P");
-                args.push(&path_string);
-            }
-
-            // Format Logic
-            let format_arg;
-            if let Some(spec) = format_spec {
-                if spec == "audio" {
-                    args.push("-x");
-                    args.push("--audio-format");
-                    args.push("mp3");
-                } else {
-                    // Assume spec is a format_id (e.g. "137")
-                    // We append +bestaudio to ensure we get sound
-                    // Unless it's already a combined format, but +bestaudio is usually safe for video-only streams
-                    format_arg = format!("{}+bestaudio/best", spec);
-                    args.push("-f");
-                    args.push(&format_arg);
-                    // Force merge to mp4/mkv if needed? 
-                    // args.push("--merge-output-format");
-                    // args.push("mp4");
+                let cookie_arg;
+                if let Some(ref path) = cookie_file_path {
+                    cookie_arg = path.clone();
+                    args.push("--cookies");
+                    args.push(&cookie_arg);
                 }
-            }
-            
-            args.push(&url);
 
-            let sidecar_command = app.shell().command("yt-dlp")
-                .args(args);
+                args.push("--add-metadata");
+                args.push("--embed-thumbnail");
 
-            match sidecar_command.spawn() {
-                Ok((mut rx, mut _child)) => {
-                    while let Some(event) = rx.recv().await {
-                         match event {
-                            CommandEvent::Stdout(line) => {
-                                let line_str = String::from_utf8_lossy(&line);
-                                let parts: Vec<&str> = line_str.split('|').collect();
-                                if parts.len() >= 3 {
-                                    let percent_str = parts[0].trim().replace("%", "");
-                                    let speed = parts[1].trim().to_string();
-                                    let eta = parts[2].trim().to_string();
-                                    let total_size = if parts.len() >= 4 {
-                                        Some(parts[3].trim().to_string())
-                                    } else {
-                                        None
-                                    };
+                let path_string;
+                if let Some(p) = &path {
+                    path_string = p.clone();
+                    args.push("-P");
+                    args.push(&path_string);
+                }
 
-                                    if let Ok(progress) = percent_str.parse::<f64>() {
+                let format_arg;
+                if let Some(ref spec) = format_spec {
+                    if spec == "audio" {
+                        args.push("-x");
+                        args.push("--audio-format");
+                        args.push("mp3");
+                    } else {
+                        format_arg = format!("{}+bestaudio/best", spec);
+                        args.push("-f");
+                        args.push(&format_arg);
+                        args.push("--merge-output-format");
+                        args.push("mp4/mkv");
+                    }
+                }
+                
+                args.push(&url_inner);
+
+                let sidecar_command = app_inner.shell().command("yt-dlp").args(args);
+
+                match sidecar_command.spawn() {
+                    Ok((mut rx, child)) => {
+                        {
+                            let mut task = task_ref.lock().unwrap();
+                            task.child = Some(child);
+                            let _ = task.transition(DownloadStatus::Downloading);
+                        }
+
+                        while let Some(event) = rx.recv().await {
+                             match event {
+                                CommandEvent::Stdout(line) => {
+                                    let line_str = String::from_utf8_lossy(&line);
+                                    
+                                    if line_str.contains("[download] Destination:") {
+                                        let path_part = line_str.split("Destination:").nth(1).unwrap_or("").trim();
+                                        if !path_part.is_empty() {
+                                            let mut task = task_ref.lock().unwrap();
+                                            task.final_path = Some(std::path::PathBuf::from(path_part));
+                                        }
+                                    }
+
+                                    if line_str.contains("[Merger] Merging formats into") {
+                                        let path_part = line_str.split("formats into").nth(1).unwrap_or("").trim().trim_matches('"');
+                                        if !path_part.is_empty() {
+                                            let mut task = task_ref.lock().unwrap();
+                                            task.final_path = Some(std::path::PathBuf::from(path_part));
+                                        }
+                                    }
+
+                                    if line_str.contains("has already been downloaded") && line_str.contains("[download]") {
+                                        let path_part = line_str.split("[download]").nth(1).unwrap_or("")
+                                            .split("has already been downloaded").nth(0).unwrap_or("").trim().trim_matches('"');
+                                        if !path_part.is_empty() {
+                                            let mut task = task_ref.lock().unwrap();
+                                            task.final_path = Some(std::path::PathBuf::from(path_part));
+                                        }
+                                    }
+
+                                    if line_str.contains("[Merger]") {
+                                        let mut task = task_ref.lock().unwrap();
+                                        let _ = task.transition(DownloadStatus::Merging);
+                                        
+                                        let payload = DownloadProgressPayload {
+                                            id: id.clone(),
+                                            progress: 100.0,
+                                            speed: None,
+                                            eta: None,
+                                            status: DownloadStatus::Merging,
+                                            total_size: None,
+                                            downloaded_bytes: None,
+                                            can_retry: Some(false),
+                                            error_message: None,
+                                            version: SYSTEM_GUARDRAILS.ipc_version,
+                                        };
+                                        let _ = app_inner.emit("download-progress", payload);
+                                        continue;
+                                    }
+
+                                    let parts: Vec<&str> = line_str.split('|').collect();
+                                    if parts.len() >= 4 {
+                                        let downloaded = parts[0].trim().parse::<u64>().unwrap_or(0);
+                                        let total = parts[1].trim().parse::<u64>().unwrap_or(0);
+                                        // Speed comes as decimal from yt-dlp, parse as f64 then convert
+                                        let speed = parts[2].trim().parse::<f64>().ok().map(|s| s as u64);
+                                        let eta = parts[3].trim().parse::<u64>().ok();
+
+                                        let progress = if total > 0 {
+                                            (downloaded as f64 / total as f64) * 100.0
+                                        } else {
+                                            0.0
+                                        };
+
+                                        {
+                                            let mut task = task_ref.lock().unwrap();
+                                            task.progress = progress;
+                                            task.speed = speed;
+                                            task.eta = eta;
+                                            task.total_size = if total > 0 { Some(total) } else { None };
+                                            task.downloaded_bytes = Some(downloaded);
+                                        }
+
                                         let payload = DownloadProgressPayload {
                                             id: id.clone(),
                                             progress,
                                             speed,
                                             eta,
                                             status: DownloadStatus::Downloading,
-                                            total_size,
+                                            total_size: if total > 0 { Some(total) } else { None },
+                                            downloaded_bytes: Some(downloaded),
+                                            can_retry: Some(false),
+                                            error_message: None,
+                                            version: SYSTEM_GUARDRAILS.ipc_version,
                                         };
-                                        let _ = app.emit("download-progress", payload);
+                                        let _ = app_inner.emit("download-progress", payload);
                                     }
                                 }
-                            }
-                            CommandEvent::Terminated(payload) => {
-                                 let status = if payload.code == Some(0) {
-                                     DownloadStatus::Completed
-                                 } else {
-                                     DownloadStatus::Error
-                                 };
-                                 
-                                 let final_payload = DownloadProgressPayload {
-                                    id: id.clone(),
-                                    progress: 100.0,
-                                    speed: "-".to_string(),
-                                    eta: "-".to_string(),
-                                    status,
-                                    total_size: None, // Keep last known? Or just None
-                                 };
-                                 let _ = app.emit("download-progress", final_payload);
-                                 
-                                 let mut map = active_downloads.lock().unwrap();
-                                 map.remove(&id);
+                                CommandEvent::Terminated(payload) => {
+                                      let (current_status, final_path) = {
+                                         let mut task = task_ref.lock().unwrap();
+                                         let s = task.status.clone();
+                                         let p = task.final_path.clone();
+                                         task.child = None;
+                                         (s, p)
+                                      };
+                                      
+                                      let status = if payload.code == Some(0) {
+                                          if let Some(path) = final_path {
+                                              match verify_media_integrity(&app_inner, &path).await {
+                                                  Ok(_) => {
+                                                      let mut task = task_ref.lock().unwrap();
+                                                      let _ = task.transition(DownloadStatus::Completed);
+                                                      DownloadStatus::Completed
+                                                  }
+                                                  Err(e) => {
+                                                      println!("Verification failed: {}", e);
+                                                      let mut task = task_ref.lock().unwrap();
+                                                      let _ = task.transition(DownloadStatus::Error);
+                                                      DownloadStatus::Error
+                                                  }
+                                              }
+                                          } else {
+                                              let mut task = task_ref.lock().unwrap();
+                                              let _ = task.transition(DownloadStatus::Error);
+                                              DownloadStatus::Error
+                                          }
+                                      } else if current_status == DownloadStatus::Cancelled {
+                                          DownloadStatus::Cancelled
+                                      } else {
+                                          let mut task = task_ref.lock().unwrap();
+                                          let _ = task.transition(DownloadStatus::Error);
+                                          DownloadStatus::Error
+                                      };
 
-                                 // Cleanup cookies
-                                 if let Some(ref path) = cookie_file_path {
-                                     let _ = fs::remove_file(path);
-                                 }
+                                     // Explicit cleanup
+                                     if status == DownloadStatus::Cancelled || status == DownloadStatus::Error {
+                                         let dest = {
+                                             let task = task_ref.lock().unwrap();
+                                             task.final_path.clone()
+                                         };
+                                         if let Some(dest) = dest {
+                                             let _ = fs::remove_file(format!("{}.part", dest.display()));
+                                             let _ = fs::remove_file(format!("{}.ytdl", dest.display()));
+                                         }
+                                     }
+                                     
+                                     let final_payload = DownloadProgressPayload {
+                                        id: id.clone(),
+                                        progress: if status == DownloadStatus::Completed { 100.0 } else { 0.0 },
+                                        speed: None,
+                                        eta: None,
+                                        status: status.clone(),
+                                        total_size: None,
+                                        downloaded_bytes: None,
+                                        can_retry: Some(status == DownloadStatus::Error),
+                                        error_message: if status == DownloadStatus::Error { Some("Download failed".to_string()) } else { None },
+                                        version: SYSTEM_GUARDRAILS.ipc_version,
+                                     };
+                                     let _ = app_inner.emit("download-progress", final_payload);
+                                     
+                                     if let Some(ref path) = cookie_file_path {
+                                         let _ = fs::remove_file(path);
+                                     }
+
+                                     // Process next in queue
+                                     let manager = app_inner.state::<DownloadManager>();
+                                     
+                                     // Trigger persistence save
+                                     if let Some(persistence) = app_inner.try_state::<crate::persistence::PersistenceManager>() {
+                                         let _ = persistence.save_tasks(&manager.tasks.lock().unwrap());
+                                     }
+
+                                     manager.process_queue(app_inner.clone(), path.clone(), format_spec.clone(), cookies.clone());
+                                     
+                                     return;
+                                }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
-                }
-                Err(e) => {
-                    let payload = DownloadProgressPayload {
-                        id: id.clone(),
-                        progress: 0.0,
-                        speed: "-".to_string(),
-                        eta: "-".to_string(),
-                        status: DownloadStatus::Error,
-                        total_size: None,
-                    };
-                    let _ = app.emit("download-progress", payload);
-                    eprintln!("Failed to spawn yt-dlp: {}", e);
-                    
-                    let mut map = active_downloads.lock().unwrap();
-                    map.remove(&id);
+                    Err(_) => {
+                        {
+                            let mut task = task_ref.lock().unwrap();
+                            let _ = task.transition(DownloadStatus::Error);
+                        }
+                        let payload = DownloadProgressPayload {
+                            id: id.clone(),
+                            progress: 0.0,
+                            speed: None,
+                            eta: None,
+                            status: DownloadStatus::Error,
+                            total_size: None,
+                            downloaded_bytes: None,
+                            can_retry: Some(true),
+                            error_message: Some("Failed to start process".to_string()),
+                            version: SYSTEM_GUARDRAILS.ipc_version,
+                        };
+                        let _ = app_inner.emit("download-progress", payload);
+                        
+                        if let Some(ref path) = cookie_file_path {
+                            let _ = fs::remove_file(path);
+                        }
 
-                    // Cleanup cookies
-                    if let Some(ref path) = cookie_file_path {
-                        let _ = fs::remove_file(path);
+                        let manager = app_inner.state::<DownloadManager>();
+                        
+                        // Trigger persistence save
+                        if let Some(persistence) = app_inner.try_state::<crate::persistence::PersistenceManager>() {
+                            let _ = persistence.save_tasks(&manager.tasks.lock().unwrap());
+                        }
+
+                        manager.process_queue(app_inner.clone(), path, format_spec, cookies);
                     }
                 }
-            }
-        });
+            });
+        }
     }
 }
+

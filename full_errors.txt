@@ -1,0 +1,36 @@
+    Checking vidflow-desktop v0.1.0 (/Volumes/Data/saffi/updateddownloader/vidflow-desktop/src-tauri)
+warning: unused variable: `tasks_inner`
+   --> src/download.rs:367:17
+    |
+367 |             let tasks_inner = tasks_arc.clone();
+    |                 ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tasks_inner`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: enum `DownloadError` is never used
+  --> src/download.rs:16:10
+   |
+16 | pub enum DownloadError {
+   |          ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `is_retryable` is never used
+  --> src/download.rs:30:12
+   |
+29 | impl DownloadError {
+   | ------------------ method in this implementation
+30 |     pub fn is_retryable(&self) -> bool {
+   |            ^^^^^^^^^^^^
+
+warning: field `title` is never read
+   --> src/download.rs:135:9
+    |
+132 | pub struct DownloadTask {
+    |            ------------ field in this struct
+...
+135 |     pub title: String,
+    |         ^^^^^
+
+warning: `vidflow-desktop` (lib) generated 4 warnings (run `cargo fix --lib -p vidflow-desktop` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.84s

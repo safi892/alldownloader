@@ -4,6 +4,7 @@ import { Input } from "@/ui/primitives/Input";
 import { ArrowRight, Link, ListPlus, CheckCircle, FolderOpen } from "lucide-react";
 import { useDownloadStore } from "@/state/useDownloadStore";
 import { open } from "@tauri-apps/plugin-dialog";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
 
 export const AddDownloadForm = () => {
     const [url, setUrl] = useState("");
@@ -25,6 +26,22 @@ export const AddDownloadForm = () => {
         e.preventDefault();
         if (url) {
             analyzeUrl(url);
+            setUrl(""); // Clear input after analyze
+        }
+    };
+
+    const handleInputFocus = async () => {
+        // Auto-paste from clipboard if input is empty
+        if (!url) {
+            try {
+                const clipboardText = await readText();
+                if (clipboardText && (clipboardText.startsWith("http://") || clipboardText.startsWith("https://"))) {
+                    setUrl(clipboardText);
+                }
+            } catch (error) {
+                // Silently fail if clipboard access is denied
+                console.log("Clipboard access not available");
+            }
         }
     };
 
@@ -74,6 +91,7 @@ export const AddDownloadForm = () => {
                         <Input
                             value={url}
                             onChange={(e) => setUrl(e.target.value)}
+                            onFocus={handleInputFocus}
                             className="pl-12 py-6 text-base rounded-xl bg-[#131022] border-glass-border focus-visible:ring-primary"
                             placeholder="Paste video URL from YouTube, TikTok, Vimeo..."
                         />

@@ -8,6 +8,7 @@ import {
 } from '@tauri-apps/plugin-notification';
 import { Download, IDownloadService, DownloadProgressPayload, VideoMetadata } from "@/types/download";
 import { TauriDownloadService } from "@/services/TauriDownloadService";
+import { formatBytes, formatSpeed, formatETA } from "@/utils/formatUtils";
 
 // Use real service
 const api: IDownloadService = new TauriDownloadService();
@@ -126,10 +127,11 @@ export const useDownloadStore = create<DownloadState>()(
                                 newTasks[idx] = {
                                     ...newTasks[idx],
                                     progress: payload.progress,
-                                    speed: payload.speed,
-                                    eta: payload.eta,
+                                    speed: formatSpeed(payload.speed),
+                                    eta: formatETA(payload.eta),
                                     status: payload.status,
-                                    totalSize: payload.total_size || newTasks[idx].totalSize
+                                    totalSize: formatBytes(payload.total_size),
+                                    downloadedBytes: payload.downloaded_bytes ?? newTasks[idx].downloadedBytes
                                 };
                                 updated = true;
                             }
@@ -142,7 +144,7 @@ export const useDownloadStore = create<DownloadState>()(
                 await listen<DownloadProgressPayload>("download-progress", (event) => {
                     const payload = event.payload;
 
-                    if (payload.status === 'completed' || payload.status === 'error') {
+                    if (['completed', 'error', 'cancelled'].includes(payload.status)) {
                         set((state) => {
                             const idx = state.tasks.findIndex(t => t.id === payload.id);
                             if (idx === -1) return {};
@@ -161,9 +163,10 @@ export const useDownloadStore = create<DownloadState>()(
                                 ...task,
                                 status: payload.status,
                                 progress: payload.progress,
-                                speed: payload.speed,
-                                eta: payload.eta,
-                                totalSize: payload.total_size || task.totalSize
+                                speed: formatSpeed(payload.speed),
+                                eta: formatETA(payload.eta),
+                                totalSize: formatBytes(payload.total_size),
+                                error: payload.error_message || (payload.status === 'error' ? 'Download failed' : undefined)
                             };
                             return { tasks: newTasks };
                         });
@@ -174,6 +177,10 @@ export const useDownloadStore = create<DownloadState>()(
                             updateTimer = setInterval(flushUpdates, 200);
                         }
                     }
+                });
+
+                await listen<string>("binary-error", (event) => {
+                    set({ error: event.payload });
                 });
             },
 
@@ -200,10 +207,19 @@ export const useDownloadStore = create<DownloadState>()(
                 const { analysisCtx, downloadPath } = get();
                 if (!analysisCtx) return;
 
-                set({ analysisCtx: null }); // Close modal/selection
+                set({ analysisCtx: null });
+
+                // Principal Hardening: Pre-populate totalSize from metadata if possible
+                let initialSize: string | undefined = undefined;
+                if (formatSpec !== 'audio' && formatSpec !== 'best') {
+                    const fmt = analysisCtx.metadata.formats.find(f => f.format_id === formatSpec);
+                    if (fmt?.filesize) {
+                        initialSize = formatBytes(fmt.filesize);
+                    }
+                }
 
                 const newTask: Download = {
-                    id: `pending-${Date.now()}`, // Temporary ID
+                    id: crypto.randomUUID(), // Proper UUID
                     url: analysisCtx.url,
                     sourceUrl: analysisCtx.metadata.webpage_url,
                     title: analysisCtx.metadata.title,
@@ -213,7 +229,8 @@ export const useDownloadStore = create<DownloadState>()(
                     thumbnail: analysisCtx.metadata.thumbnail,
                     duration: analysisCtx.metadata.duration ?? undefined,
                     progress: 0,
-                    status: "queued"
+                    status: "queued",
+                    totalSize: initialSize
                 };
 
                 set((state) => ({
@@ -225,40 +242,30 @@ export const useDownloadStore = create<DownloadState>()(
 
             processQueue: async () => {
                 const { tasks, settings } = get();
+                if (!settings.concurrencyMode) return;
 
-                if (!settings.concurrencyMode) {
-                    // Start all queued tasks
-                    const queuedPendingTasks = tasks.filter(t => t.status === 'queued' && t.id.startsWith('pending-'));
-                    for (const task of queuedPendingTasks) {
-                        try {
-                            const realId = await api.startDownload(task.url, {
-                                path: task.downloadDir,
-                                format: task.formatSpec,
-                                cookies: settings.cookies
-                            });
-
-                            set(state => ({
-                                tasks: state.tasks.map(t => t.id === task.id ? { ...t, id: realId, status: 'downloading' } : t)
-                            }));
-                        } catch (err) {
-                            console.error("Batch start failed:", err);
-                        }
-                    }
-                    return;
-                }
-
-                const activeCount = tasks.filter(t => t.status === 'downloading' || (t.status === 'queued' && !t.id.startsWith('pending-'))).length;
+                const activeCount = tasks.filter(t =>
+                    ['preparing', 'downloading', 'merging'].includes(t.status)
+                ).length;
 
                 if (activeCount < settings.maxConcurrent) {
-                    const nextTask = tasks.find(t => t.status === 'queued' && t.id.startsWith('pending-'));
+                    const nextTask = tasks.find(t => t.status === 'queued');
                     if (nextTask) {
                         try {
+                            // Move to preparing state
+                            set(state => ({
+                                tasks: state.tasks.map(t => t.id === nextTask.id ? { ...t, status: 'preparing' } : t)
+                            }));
+
                             const realId = await api.startDownload(nextTask.url, {
+                                title: nextTask.title || "Unknown Title",
                                 path: nextTask.downloadDir,
                                 format: nextTask.formatSpec,
                                 cookies: settings.cookies
                             });
 
+                            // Update to real ID from backend and set to downloading
+                            // The backend starts immediately, so we move to downloading
                             set(state => ({
                                 tasks: state.tasks.map(t => t.id === nextTask.id ? { ...t, id: realId, status: 'downloading' } : t)
                             }));
@@ -300,6 +307,7 @@ export const useDownloadStore = create<DownloadState>()(
 
                     const settings = get().settings;
                     const newId = await api.startDownload(task.url, {
+                        title: task.title || "Unknown Title",
                         path: downloadPath,
                         format: task.formatSpec,
                         cookies: settings.cookies
@@ -327,7 +335,7 @@ export const useDownloadStore = create<DownloadState>()(
             cancelTask: async (id: string) => {
                 await api.cancelDownload(id);
                 set(state => ({
-                    tasks: state.tasks.filter(t => t.id !== id)
+                    tasks: state.tasks.map(t => t.id === id ? { ...t, status: 'cancelled' } : t)
                 }));
             },
 
