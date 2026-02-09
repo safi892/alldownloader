@@ -52,6 +52,7 @@ interface DownloadState {
     resumeTask: (id: string) => Promise<void>;
     retryTask: (id: string) => Promise<void>;
     cancelTask: (id: string) => Promise<void>;
+    removeTask: (id: string) => Promise<void>;
     openFolder: (id: string) => Promise<void>;
 }
 
@@ -190,6 +191,19 @@ export const useDownloadStore = create<DownloadState>()(
 
             analyzeUrl: async (url: string) => {
                 if (!url) return;
+
+                // Content Restrictions (Safety Guardrail)
+                const BLOCKED_KEYWORDS = ["porn", "adult", "sexual", "xrated", "xvideo", "pornhub", "xvideos", "sex", "nude", "nudity"];
+                const isBlocked = BLOCKED_KEYWORDS.some(k => url.toLowerCase().includes(k));
+
+                if (isBlocked) {
+                    set({
+                        isAnalyzing: false,
+                        error: "Safety Restriction: This content type is not supported for download."
+                    });
+                    return;
+                }
+
                 set({ isAnalyzing: true, error: null });
                 try {
                     const metadata = await api.getVideoMetadata(url);
@@ -336,6 +350,17 @@ export const useDownloadStore = create<DownloadState>()(
                 await api.cancelDownload(id);
                 set(state => ({
                     tasks: state.tasks.map(t => t.id === id ? { ...t, status: 'cancelled' } : t)
+                }));
+            },
+
+            removeTask: async (id: string) => {
+                // If active, try to cancel first (ignore errors if already terminal)
+                try {
+                    await api.cancelDownload(id);
+                } catch (e) { /* ignore */ }
+
+                set(state => ({
+                    tasks: state.tasks.filter(t => t.id !== id)
                 }));
             },
 

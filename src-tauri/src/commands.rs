@@ -38,6 +38,30 @@ pub async fn cancel_download(
 }
 
 #[tauri::command]
+pub async fn pause_download(
+    state: State<'_, DownloadManager>,
+    id: String,
+) -> Result<(), String> {
+    if state.pause_download(&id) {
+        Ok(())
+    } else {
+        Err("Could not pause task".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn resume_download(
+    state: State<'_, DownloadManager>,
+    id: String,
+) -> Result<(), String> {
+    if state.resume_download(&id) {
+        Ok(())
+    } else {
+        Err("Could not resume task".to_string())
+    }
+}
+
+#[tauri::command]
 pub async fn list_downloads(
     state: State<'_, DownloadManager>,
 ) -> Result<Vec<crate::download::DownloadProgressPayload>, String> {

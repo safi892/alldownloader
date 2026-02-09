@@ -10,6 +10,7 @@
     "shell:allow-open",
     "dialog:default",
     "clipboard-manager:default",
+    "clipboard-manager:allow-read-text",
     "notification:default",
     {
       "identifier": "shell:allow-execute",

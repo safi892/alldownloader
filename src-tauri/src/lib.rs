@@ -112,6 +112,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::start_download,
             commands::cancel_download,
+            commands::pause_download,
+            commands::resume_download,
             commands::get_video_metadata,
             commands::list_downloads,
             commands::show_in_folder,

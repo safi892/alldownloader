@@ -25,7 +25,7 @@ const formatDuration = (seconds: number): string => {
 };
 
 export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
-    const { pauseTask, resumeTask, cancelTask, retryTask } = useDownloadStore();
+    const { pauseTask, resumeTask, removeTask, retryTask } = useDownloadStore();
     const siteInfo = getSiteInfo(task.sourceUrl || task.url);
 
     const isPaused = task.status === 'paused';
@@ -35,7 +35,6 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
     const isPreparing = task.status === 'preparing';
     const isMerging = task.status === 'merging';
     const isCancelled = task.status === 'cancelled';
-    const isTerminal = isCompleted || isError || isCancelled;
 
     return (
         <motion.div
@@ -48,15 +47,15 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                 delay: Math.min(index * 0.05, 0.3), // Staggered entrance
                 layout: { type: "spring", stiffness: 300, damping: 30 }
             }}
-            className="group relative rounded-xl bg-glass-surface backdrop-blur-md border border-glass-border p-4 transition-all hover:bg-[#252236]"
+            className="group relative rounded-xl bg-white dark:bg-glass-surface backdrop-blur-md border border-gray-100 dark:border-glass-border p-4 transition-all hover:bg-gray-50 dark:hover:bg-[#252236] shadow-sm dark:shadow-none"
         >
             <div className="flex gap-4 items-center">
                 {/* Thumbnail */}
-                <div className="relative shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-black/50 ring-1 ring-white/5 flex items-center justify-center group/thumb">
+                <div className="relative shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-slate-100 dark:bg-black/50 ring-1 ring-slate-200 dark:ring-white/5 flex items-center justify-center group/thumb shadow-inner">
                     {task.thumbnail ? (
                         <img src={task.thumbnail} alt={task.title} className="w-full h-full object-cover" />
                     ) : (
-                        task.format === 'audio' ? <Music className="text-white/20" /> : <FileVideo className="text-white/20" />
+                        task.format === 'audio' ? <Music className="text-slate-400 dark:text-white/20" /> : <FileVideo className="text-slate-400 dark:text-white/20" />
                     )}
 
                     {/* Duration Badge */}
@@ -68,7 +67,7 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
 
                     {/* Site Logo Badge */}
                     {siteInfo.logoUrl && (
-                        <div className="absolute top-1 left-1 bg-white rounded-full p-0.5 shadow-lg border border-white/10 group-hover:scale-110 transition-transform">
+                        <div className="absolute top-1 left-1 bg-white rounded-full p-0.5 shadow-lg border border-slate-100 dark:border-white/10 group-hover:scale-110 transition-transform">
                             <img src={siteInfo.logoUrl} alt={siteInfo.name} className="size-3.5 object-contain" />
                         </div>
                     )}
@@ -90,32 +89,31 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                 {/* Info & Controls */}
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
                     <div className="flex justify-between items-start">
-                        <h4 className="text-white font-medium truncate pr-4" title={task.title || task.url}>
+                        <h4 className="text-slate-900 dark:text-white font-medium truncate pr-4" title={task.title || task.url}>
                             {task.title || task.url}
                         </h4>
                         <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                             {isActive && (
-                                <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => pauseTask(task.id)} aria-label="Pause Download">
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10" onClick={() => pauseTask(task.id)} aria-label="Pause Download">
                                     <Pause size={16} />
                                 </Button>
                             )}
                             {isPaused && (
-                                <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => resumeTask(task.id)} aria-label="Resume Download">
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10" onClick={() => resumeTask(task.id)} aria-label="Resume Download">
                                     <Play size={16} />
                                 </Button>
                             )}
                             {isError && (
-                                <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:bg-red-500/20" onClick={() => retryTask(task.id)} aria-label="Retry Download">
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 dark:text-red-400 hover:bg-red-500/10" onClick={() => retryTask(task.id)} aria-label="Retry Download">
                                     <RotateCcw size={16} />
                                 </Button>
                             )}
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-gray-400 hover:text-red-400 hover:bg-red-500/20"
-                                onClick={() => cancelTask(task.id)}
-                                aria-label="Cancel Download"
-                                disabled={isTerminal}
+                                className="h-8 w-8 text-slate-400 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10"
+                                onClick={() => removeTask(task.id)}
+                                aria-label="Remove Download"
                             >
                                 <X size={16} />
                             </Button>
@@ -123,14 +121,14 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                     </div>
 
                     {/* Meta */}
-                    <div className="flex items-center gap-3 text-xs text-[#a19db9]">
+                    <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-[#a19db9]">
                         <span className={cn(
                             "capitalize font-medium",
-                            isPreparing && "text-blue-400",
-                            isMerging && "text-purple-400",
-                            isCompleted && "text-green-400",
-                            isError && "text-red-400",
-                            isCancelled && "text-gray-500"
+                            isPreparing && "text-blue-600 dark:text-blue-400",
+                            isMerging && "text-purple-600 dark:text-purple-400",
+                            isCompleted && "text-green-600 dark:text-green-400",
+                            isError && "text-red-600 dark:text-red-400",
+                            isCancelled && "text-slate-400 dark:text-gray-500"
                         )}>
                             {task.status}
                         </span>
@@ -142,7 +140,7 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                                     initial={{ opacity: 0, scale: 0.8, x: -10 }}
                                     animate={{ opacity: 1, scale: 1, x: 0 }}
                                     exit={{ opacity: 0, scale: 0.8 }}
-                                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/10"
+                                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10"
                                     style={{ borderColor: `${siteInfo.color}33` }}
                                 >
                                     {siteInfo.logoUrl && (
@@ -160,10 +158,10 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                         {/* Video Size (Permanent) */}
                         {task.totalSize && task.totalSize !== '-' && (
                             <>
-                                <span className="size-1 rounded-full bg-[#3f3b54]" />
+                                <span className="size-1 rounded-full bg-slate-300 dark:bg-[#3f3b54]" />
                                 <span className="flex gap-1.5 items-center">
                                     <span className="opacity-50">Size:</span>
-                                    <span className="text-white font-mono">{task.totalSize}</span>
+                                    <span className="text-slate-700 dark:text-white font-mono">{task.totalSize}</span>
                                 </span>
                             </>
                         )}
@@ -171,9 +169,9 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                         {/* ETA & Speed (Transient - Only when active) */}
                         {isActive && task.eta && task.eta !== '-' && (
                             <>
-                                <span className="size-1 rounded-full bg-[#3f3b54]" />
-                                <span className="flex gap-1.5 items-center text-primary group-hover:text-white transition-colors">
-                                    <span className="opacity-50">ETA:</span>
+                                <span className="size-1 rounded-full bg-slate-300 dark:bg-[#3f3b54]" />
+                                <span className="flex gap-1.5 items-center text-primary font-medium">
+                                    <span className="opacity-50 text-slate-500">ETA:</span>
                                     <span className="font-mono">{task.eta}</span>
                                 </span>
                             </>
@@ -181,18 +179,18 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
 
                         {isActive && (
                             <>
-                                <span className="size-1 rounded-full bg-[#3f3b54]" />
-                                <span className="flex gap-1.5 items-center">
+                                <span className="size-1 rounded-full bg-slate-300 dark:bg-[#3f3b54]" />
+                                <span className="flex gap-1.5 items-center font-medium">
                                     <span className="opacity-50">Speed:</span>
-                                    <span className="text-white font-mono">{task.speed || '-'}</span>
+                                    <span className="text-slate-700 dark:text-white font-mono">{task.speed || '-'}</span>
                                 </span>
                             </>
                         )}
 
                         {isError && (
                             <>
-                                <span className="size-1 rounded-full bg-[#3f3b54]" />
-                                <span className="text-red-400 font-medium truncate max-w-[150px]">{task.error}</span>
+                                <span className="size-1 rounded-full bg-slate-300 dark:bg-[#3f3b54]" />
+                                <span className="text-red-500 dark:text-red-400 font-medium truncate max-w-[150px]">{task.error}</span>
                             </>
                         )}
                     </div>
@@ -200,7 +198,7 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                     {/* Progress Bar */}
                     <div className="mt-2 flex items-center gap-3">
                         <div
-                            className="h-1.5 w-full bg-[#3f3b54] rounded-full overflow-hidden"
+                            className="h-1.5 w-full bg-slate-100 dark:bg-[#3f3b54] rounded-full overflow-hidden shadow-inner"
                             role="progressbar"
                             aria-valuenow={task.progress}
                             aria-valuemin={0}
@@ -223,7 +221,7 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                                 )}
                             </div>
                         </div>
-                        <span className="text-xs font-medium text-white tabular-nums w-8 text-right" aria-live="polite">
+                        <span className="text-xs font-bold text-slate-700 dark:text-white tabular-nums w-8 text-right" aria-live="polite">
                             {task.progress.toFixed(1)}%
                         </span>
                     </div>

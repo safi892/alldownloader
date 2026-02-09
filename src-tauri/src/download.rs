@@ -10,34 +10,7 @@ use tauri_plugin_shell::process::CommandEvent;
 pub type Child = (); 
 #[cfg(not(mobile))]
 pub use tauri_plugin_shell::process::CommandChild as Child;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum DownloadError {
-    #[error("Failed to execute yt-dlp: {0}")]
-    ProcessSpawn(String),
-    #[error("yt-dlp failed: {0}")]
-    ProcessExecution(String),
-    #[error("JSON parsing failed: {0}")]
-    JsonParsing(String),
-    #[error("File operation failed: {0}")]
-    FileOperation(String),
-    #[error("Download cancelled by user")]
-    Cancelled,
-}
-
-impl DownloadError {
-    pub fn is_retryable(&self) -> bool {
-        match self {
-            DownloadError::ProcessSpawn(_) => true,
-            DownloadError::ProcessExecution(err) => {
-                // Heuristic: network errors are usually retryable
-                err.contains("network") || err.contains("connection") || err.contains("HTTP Error")
-            },
-            _ => false,
-        }
-    }
-}
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -310,7 +283,6 @@ impl DownloadManager {
                 #[cfg(windows)]
                 {
                     let pid = child.pid();
-                    // Taskkill /F /T /PID: Force, Tree, PID
                     let _ = std::process::Command::new("taskkill")
                         .args(["/F", "/T", "/PID", &pid.to_string()])
                         .spawn();
@@ -319,11 +291,72 @@ impl DownloadManager {
                 {
                     let _ = child.kill();
                 }
-                let _ = task.transition(DownloadStatus::Cancelled);
-                true
-            } else if task.status == DownloadStatus::Queued {
-                let _ = task.transition(DownloadStatus::Cancelled);
-                true
+            }
+            let _ = task.transition(DownloadStatus::Cancelled);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn pause_download(&self, id: &str) -> bool {
+        let tasks = self.tasks.lock().unwrap();
+        if let Some(task_arc) = tasks.get(id) {
+            let mut task = task_arc.lock().unwrap();
+            
+            // Only pause if downloading
+            if task.status != DownloadStatus::Downloading {
+                return false;
+            }
+
+            if let Some(child) = &task.child {
+                #[cfg(unix)]
+                {
+                    let pid = child.pid();
+                    let _ = std::process::Command::new("kill")
+                        .args(["-STOP", &pid.to_string()])
+                        .spawn();
+                    let _ = task.transition(DownloadStatus::Paused);
+                    return true;
+                }
+                #[cfg(windows)]
+                {
+                    // Generic Windows pause is hard without specialized APIs, 
+                    // we could kill but yt-dlp resume is handled by restarting.
+                    // For now we just return false or implement tree-suspend.
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn resume_download(&self, id: &str) -> bool {
+        let tasks = self.tasks.lock().unwrap();
+        if let Some(task_arc) = tasks.get(id) {
+            let mut task = task_arc.lock().unwrap();
+            
+            if task.status != DownloadStatus::Paused {
+                return false;
+            }
+
+            if let Some(child) = &task.child {
+                #[cfg(unix)]
+                {
+                    let pid = child.pid();
+                    let _ = std::process::Command::new("kill")
+                        .args(["-CONT", &pid.to_string()])
+                        .spawn();
+                    let _ = task.transition(DownloadStatus::Downloading);
+                    return true;
+                }
+                #[cfg(windows)]
+                {
+                    false
+                }
             } else {
                 false
             }
@@ -427,7 +460,6 @@ impl DownloadManager {
             }
 
             // Start the actual download in a spawn
-            let tasks_inner = tasks_arc.clone();
             let app_inner = app.clone();
             let url_inner = {
                 let task = task_ref.lock().unwrap();

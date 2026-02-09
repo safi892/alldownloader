@@ -13,7 +13,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 
 export const DownloadDashboard = () => {
-    const { tasks, isLoading, initializeListeners, pauseTask, cancelTask, analyzeUrl } = useDownloadStore();
+    const { tasks, isLoading, initializeListeners, pauseTask, removeTask, analyzeUrl } = useDownloadStore();
     const analysisCtx = useDownloadStore(state => state.analysisCtx);
     const confirmDownload = useDownloadStore(state => state.confirmDownload);
     const cancelAnalysis = useDownloadStore(state => state.cancelAnalysis);
@@ -31,7 +31,7 @@ export const DownloadDashboard = () => {
     };
 
     const handleClearCompleted = () => {
-        tasks.filter(t => t.status === 'completed' || t.status === 'error').forEach(t => cancelTask(t.id));
+        tasks.filter(t => t.status === 'completed' || t.status === 'error').forEach(t => removeTask(t.id));
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -70,11 +70,11 @@ export const DownloadDashboard = () => {
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary m-4 rounded-3xl flex flex-col items-center justify-center pointer-events-none"
                     >
-                        <div className="p-6 bg-surface-dark rounded-full shadow-2xl border border-glass-border animate-bounce">
+                        <div className="p-6 bg-white dark:bg-surface-dark rounded-full shadow-2xl border border-gray-200 dark:border-glass-border animate-bounce">
                             <LinkIcon size={48} className="text-primary" />
                         </div>
-                        <h3 className="text-white text-2xl font-bold mt-6">Drop to Download</h3>
-                        <p className="text-gray-400">Release to start analysis</p>
+                        <h3 className="text-slate-900 dark:text-white text-2xl font-bold mt-6">Drop to Download</h3>
+                        <p className="text-slate-500 dark:text-gray-400">Release to start analysis</p>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -101,15 +101,15 @@ export const DownloadDashboard = () => {
                 className="flex flex-wrap justify-between items-end gap-4"
             >
                 <div className="flex flex-col gap-1">
-                    <h2 className="text-white text-4xl font-black tracking-tight">Dashboard</h2>
-                    <p className="text-[#a19db9] text-base font-normal">Manage your active video downloads and queue.</p>
+                    <h2 className="text-slate-900 dark:text-white text-4xl font-black tracking-tight">Dashboard</h2>
+                    <p className="text-slate-500 dark:text-[#a19db9] text-base font-normal">Manage your active video downloads and queue.</p>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="outline" className="bg-surface-dark border-glass-border hover:bg-white/5 text-white gap-2" onClick={handlePauseAll}>
+                    <Button variant="outline" className="bg-white dark:bg-surface-dark border-gray-200 dark:border-glass-border hover:bg-gray-100 dark:hover:bg-white/5 text-slate-700 dark:text-white gap-2 transition-all" onClick={handlePauseAll}>
                         <Pause size={20} />
                         Pause All
                     </Button>
-                    <Button variant="outline" className="bg-surface-dark border-glass-border hover:bg-white/5 text-white gap-2" onClick={handleClearCompleted}>
+                    <Button variant="outline" className="bg-white dark:bg-surface-dark border-gray-200 dark:border-glass-border hover:bg-gray-100 dark:hover:bg-white/5 text-slate-700 dark:text-white gap-2 transition-all" onClick={handleClearCompleted}>
                         <Trash2 size={20} />
                         Clear Completed
                     </Button>
@@ -122,14 +122,14 @@ export const DownloadDashboard = () => {
             {/* Active Downloads Selection */}
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between px-1">
-                    <h3 className="text-white text-lg font-bold flex items-center gap-2">
+                    <h3 className="text-slate-900 dark:text-white text-lg font-bold flex items-center gap-2">
                         Active Queue
                         <span className="bg-primary/20 text-primary text-xs font-bold px-2 py-0.5 rounded-full">{activeCount}</span>
                     </h3>
-                    <div className="flex items-center gap-2 text-sm text-[#a19db9]">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-[#a19db9]">
                         <span>Sort by:</span>
-                        <div className="flex items-center gap-1 cursor-pointer hover:text-white transition-colors">
-                            <span className="font-medium text-white">Date Added</span>
+                        <div className="flex items-center gap-1 cursor-pointer hover:text-slate-900 dark:hover:text-white transition-colors">
+                            <span className="font-medium text-slate-700 dark:text-white">Date Added</span>
                             <ArrowDownUp size={14} />
                         </div>
                     </div>

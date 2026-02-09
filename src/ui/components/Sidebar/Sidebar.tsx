@@ -30,7 +30,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
                 "flex items-center gap-3 px-3 py-3 rounded-xl transition-all group",
                 isActive
                     ? "bg-primary shadow-lg shadow-primary/25 text-white"
-                    : "hover:bg-white/5 text-gray-400 hover:text-white"
+                    : "hover:bg-slate-200/50 dark:hover:bg-white/5 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
             )}
             title={collapsed ? label : undefined}
         >
@@ -59,7 +59,7 @@ export const Sidebar = () => {
 
     return (
         <aside className={cn(
-            "flex flex-col justify-between border-r border-glass-border bg-surface-dark/50 backdrop-blur-xl transition-all duration-300 h-screen",
+            "flex flex-col justify-between border-r border-gray-200 dark:border-glass-border bg-gray-50 dark:bg-surface-dark/50 backdrop-blur-xl transition-all duration-300 h-screen",
             collapsed ? "w-20" : "w-64"
         )}>
             <div className="flex flex-col gap-6 p-4">
@@ -70,8 +70,8 @@ export const Sidebar = () => {
                     </div>
                     {!collapsed && (
                         <div className="flex flex-col">
-                            <h1 className="text-white text-lg font-bold leading-none tracking-tight">VidFlow</h1>
-                            <p className="text-[#a19db9] text-xs font-medium">Pro Downloader</p>
+                            <h1 className="text-slate-900 dark:text-white text-lg font-bold leading-none tracking-tight">VidFlow</h1>
+                            <p className="text-slate-500 dark:text-[#a19db9] text-xs font-medium">Pro Downloader</p>
                         </div>
                     )}
                 </div>
@@ -86,15 +86,15 @@ export const Sidebar = () => {
             </div>
 
             {/* Bottom Section */}
-            <div className="p-4 border-t border-glass-border">
+            <div className="p-4 border-t border-gray-200 dark:border-glass-border">
                 <SidebarItem icon={Settings} label="Settings" to="/settings" collapsed={collapsed} />
 
                 {!collapsed && (
                     <div className="mt-4 flex items-center gap-3 px-3">
-                        <div className="size-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 ring-2 ring-white/10" />
+                        <div className="size-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 ring-2 ring-black/5 dark:ring-white/10" />
                         <div className="flex flex-col">
-                            <p className="text-white text-xs font-semibold">Alex Designer</p>
-                            <p className="text-[#a19db9] text-[10px]">Premium Plan</p>
+                            <p className="text-slate-900 dark:text-white text-xs font-semibold">Alex Designer</p>
+                            <p className="text-slate-500 dark:text-[#a19db9] text-[10px]">Premium Plan</p>
                         </div>
                     </div>
                 )}

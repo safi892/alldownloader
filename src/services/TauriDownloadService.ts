@@ -16,15 +16,12 @@ export class TauriDownloadService implements IDownloadService {
         });
     }
 
-    async pauseDownload(_id: string): Promise<void> {
-        // Backend command implementation pending, for now just invoke
-        // await invoke("pause_download", { id });
-        console.warn("Pause not fully implemented in backend yet");
+    async pauseDownload(id: string): Promise<void> {
+        await invoke("pause_download", { id });
     }
 
-    async resumeDownload(_id: string): Promise<void> {
-        // await invoke("resume_download", { id });
-        console.warn("Resume not fully implemented in backend yet");
+    async resumeDownload(id: string): Promise<void> {
+        await invoke("resume_download", { id });
     }
 
     async cancelDownload(id: string): Promise<void> {
