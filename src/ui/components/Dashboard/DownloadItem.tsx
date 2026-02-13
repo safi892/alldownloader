@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Play, Pause, X, FileVideo, Music, RotateCcw } from "lucide-react";
+import { Play, Pause, X, FileVideo, Music, RotateCcw, FolderOpen } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { Button } from "@/ui/primitives/Button";
 import { Download } from "@/types/download";
@@ -25,7 +25,7 @@ const formatDuration = (seconds: number): string => {
 };
 
 export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
-    const { pauseTask, resumeTask, removeTask, retryTask } = useDownloadStore();
+    const { pauseTask, resumeTask, removeTask, retryTask, openFolder } = useDownloadStore();
     const siteInfo = getSiteInfo(task.sourceUrl || task.url);
 
     const isPaused = task.status === 'paused';
@@ -83,6 +83,13 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                                 <Play className="text-white drop-shadow-lg fill-current" size={24} />
                             )}
                         </div>
+                    ) : isCompleted ? (
+                        <div
+                            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary/20 cursor-pointer"
+                            onClick={() => openFolder(task.id)}
+                        >
+                            <FolderOpen className="text-white drop-shadow-lg" size={24} />
+                        </div>
                     ) : null}
                 </div>
 
@@ -93,6 +100,11 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                             {task.title || task.url}
                         </h4>
                         <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {isCompleted && (
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => openFolder(task.id)} title="Open Folder">
+                                    <FolderOpen size={16} />
+                                </Button>
+                            )}
                             {isActive && (
                                 <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10" onClick={() => pauseTask(task.id)} aria-label="Pause Download">
                                     <Pause size={16} />
@@ -125,12 +137,12 @@ export const DownloadItem = memo(({ task, index = 0 }: DownloadItemProps) => {
                         <span className={cn(
                             "capitalize font-medium",
                             isPreparing && "text-blue-600 dark:text-blue-400",
-                            isMerging && "text-purple-600 dark:text-purple-400",
+                            isMerging && "text-purple-600 dark:text-purple-400 font-bold",
                             isCompleted && "text-green-600 dark:text-green-400",
-                            isError && "text-red-600 dark:text-red-400",
+                            isError && "text-red-600 dark:text-red-400 font-bold",
                             isCancelled && "text-slate-400 dark:text-gray-500"
                         )}>
-                            {task.status}
+                            {isPreparing ? "Preparing Engine..." : isMerging ? "Merging Media Files..." : task.status}
                         </span>
 
                         {/* Platform Badge */}

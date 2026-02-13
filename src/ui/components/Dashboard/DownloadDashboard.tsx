@@ -10,6 +10,7 @@ import { DownloadItemSkeleton } from "./DownloadItemSkeleton";
 import { useSmartClipboard } from "@/hooks/useSmartClipboard";
 import { ClipboardToast } from "./ClipboardToast";
 import { AnimatePresence, motion } from "framer-motion";
+import { cn } from "@/utils/cn";
 
 
 export const DownloadDashboard = () => {
@@ -19,19 +20,27 @@ export const DownloadDashboard = () => {
     const cancelAnalysis = useDownloadStore(state => state.cancelAnalysis);
     const { detectedUrl, clearDetected } = useSmartClipboard();
     const [isDragging, setIsDragging] = useState(false);
+    const [isConfirmingClear, setIsConfirmingClear] = useState(false);
 
     useEffect(() => {
         initializeListeners();
     }, [initializeListeners]);
 
     const activeCount = tasks.filter(t => t.status === 'downloading' || t.status === 'queued').length;
+    const completedCount = tasks.filter(t => t.status === 'completed' || t.status === 'error').length;
 
     const handlePauseAll = () => {
         tasks.filter(t => t.status === 'downloading').forEach(t => pauseTask(t.id));
     };
 
     const handleClearCompleted = () => {
+        if (!isConfirmingClear && completedCount > 0) {
+            setIsConfirmingClear(true);
+            setTimeout(() => setIsConfirmingClear(false), 3000); // Reset after 3 seconds
+            return;
+        }
         tasks.filter(t => t.status === 'completed' || t.status === 'error').forEach(t => removeTask(t.id));
+        setIsConfirmingClear(false);
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -109,9 +118,17 @@ export const DownloadDashboard = () => {
                         <Pause size={20} />
                         Pause All
                     </Button>
-                    <Button variant="outline" className="bg-white dark:bg-surface-dark border-gray-200 dark:border-glass-border hover:bg-gray-100 dark:hover:bg-white/5 text-slate-700 dark:text-white gap-2 transition-all" onClick={handleClearCompleted}>
-                        <Trash2 size={20} />
-                        Clear Completed
+                    <Button
+                        variant={isConfirmingClear ? "destructive" : "outline"}
+                        className={cn(
+                            "gap-2 transition-all",
+                            !isConfirmingClear && "bg-white dark:bg-surface-dark border-gray-200 dark:border-glass-border hover:bg-gray-100 dark:hover:bg-white/5 text-slate-700 dark:text-white"
+                        )}
+                        onClick={handleClearCompleted}
+                        disabled={completedCount === 0}
+                    >
+                        {isConfirmingClear ? <Trash2 size={20} /> : <Trash2 size={20} />}
+                        {isConfirmingClear ? "Are you sure?" : "Clear Completed"}
                     </Button>
                 </div>
             </motion.div>

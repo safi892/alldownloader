@@ -94,6 +94,7 @@ pub struct DownloadProgressPayload {
     pub downloaded_bytes: Option<u64>,
     pub can_retry: Option<bool>,
     pub error_message: Option<String>,
+    pub final_path: Option<String>,
     pub version: u32, // IPC Versioning
 }
 
@@ -399,6 +400,7 @@ impl DownloadManager {
                 downloaded_bytes: task.downloaded_bytes,
                 can_retry: Some(task.status == DownloadStatus::Error),
                 error_message: None,
+                final_path: task.final_path.as_ref().map(|p| p.to_string_lossy().to_string()),
                 version: SYSTEM_GUARDRAILS.ipc_version,
             }
         }).collect()
@@ -566,6 +568,11 @@ impl DownloadManager {
                                         let mut task = task_ref.lock().unwrap();
                                         let _ = task.transition(DownloadStatus::Merging);
                                         
+                                        let final_path = {
+                                            let task = task_ref.lock().unwrap();
+                                            task.final_path.as_ref().map(|p| p.to_string_lossy().to_string())
+                                        };
+                                        
                                         let payload = DownloadProgressPayload {
                                             id: id.clone(),
                                             progress: 100.0,
@@ -576,6 +583,7 @@ impl DownloadManager {
                                             downloaded_bytes: None,
                                             can_retry: Some(false),
                                             error_message: None,
+                                            final_path,
                                             version: SYSTEM_GUARDRAILS.ipc_version,
                                         };
                                         let _ = app_inner.emit("download-progress", payload);
@@ -605,6 +613,11 @@ impl DownloadManager {
                                             task.downloaded_bytes = Some(downloaded);
                                         }
 
+                                        let final_path = {
+                                            let task = task_ref.lock().unwrap();
+                                            task.final_path.as_ref().map(|p| p.to_string_lossy().to_string())
+                                        };
+
                                         let payload = DownloadProgressPayload {
                                             id: id.clone(),
                                             progress,
@@ -615,6 +628,7 @@ impl DownloadManager {
                                             downloaded_bytes: Some(downloaded),
                                             can_retry: Some(false),
                                             error_message: None,
+                                            final_path,
                                             version: SYSTEM_GUARDRAILS.ipc_version,
                                         };
                                         let _ = app_inner.emit("download-progress", payload);
@@ -630,8 +644,8 @@ impl DownloadManager {
                                       };
                                       
                                       let status = if payload.code == Some(0) {
-                                          if let Some(path) = final_path {
-                                              match verify_media_integrity(&app_inner, &path).await {
+                                          if let Some(ref path) = final_path {
+                                              match verify_media_integrity(&app_inner, path).await {
                                                   Ok(_) => {
                                                       let mut task = task_ref.lock().unwrap();
                                                       let _ = task.transition(DownloadStatus::Completed);
@@ -679,6 +693,7 @@ impl DownloadManager {
                                         downloaded_bytes: None,
                                         can_retry: Some(status == DownloadStatus::Error),
                                         error_message: if status == DownloadStatus::Error { Some("Download failed".to_string()) } else { None },
+                                        final_path: final_path.map(|p| p.to_string_lossy().to_string()),
                                         version: SYSTEM_GUARDRAILS.ipc_version,
                                      };
                                      let _ = app_inner.emit("download-progress", final_payload);
@@ -718,6 +733,7 @@ impl DownloadManager {
                             downloaded_bytes: None,
                             can_retry: Some(true),
                             error_message: Some("Failed to start process".to_string()),
+                            final_path: None,
                             version: SYSTEM_GUARDRAILS.ipc_version,
                         };
                         let _ = app_inner.emit("download-progress", payload);

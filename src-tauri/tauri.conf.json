@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "vidflow-desktop",
+  "productName": "VidFlow",
   "version": "0.1.0",
   "identifier": "com.macbookpro.vidflow-desktop",
   "build": {

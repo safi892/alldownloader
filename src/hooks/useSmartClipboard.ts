@@ -1,17 +1,22 @@
 import { useState, useEffect } from 'react';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useDownloadStore } from '@/state/useDownloadStore';
 
 const URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|tiktok\.com|vimeo\.com|x\.com|twitter\.com)\/.+$/i;
 
 export const useSmartClipboard = () => {
     const [detectedUrl, setDetectedUrl] = useState<string | null>(null);
     const [lastChecked, setLastChecked] = useState<string>("");
+    const clipboardDetection = useDownloadStore(state => state.settings.clipboardDetection);
 
     useEffect(() => {
+        if (!clipboardDetection) {
+            setDetectedUrl(null);
+            return;
+        }
+
         const checkClipboard = async () => {
-            // Only check if window is focused? 
-            // Ideally we want to check when the user comes back to the app.
             try {
                 const text = await readText();
                 if (text && text !== lastChecked && URL_REGEX.test(text)) {
@@ -29,13 +34,12 @@ export const useSmartClipboard = () => {
             }
         });
 
-        // Initial check too?
         checkClipboard();
 
         return () => {
             unlisten.then(f => f());
         };
-    }, [lastChecked]);
+    }, [lastChecked, clipboardDetection]);
 
     const clearDetected = () => setDetectedUrl(null);
 

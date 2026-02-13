@@ -70,24 +70,46 @@ pub async fn list_downloads(
 
 #[tauri::command]
 pub async fn show_in_folder(path: String) -> Result<(), String> {
+    let path_buf = std::path::PathBuf::from(&path);
+    let is_file = path_buf.is_file();
+
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
-            .arg(&path)
+        let mut cmd = std::process::Command::new("open");
+        if is_file {
+            cmd.arg("-R");
+        }
+        cmd.arg(&path)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        if is_file {
+            std::process::Command::new("explorer")
+                .arg("/select,")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        } else {
+            std::process::Command::new("explorer")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
     }
     #[cfg(target_os = "linux")]
     {
+        // Linux is tricky, many file managers exist. 
+        // xdg-open doesn't reveal. For now we just open the parent if it's a file.
+        let target = if is_file {
+            path_buf.parent().unwrap_or(&path_buf).to_string_lossy().to_string()
+        } else {
+            path
+        };
+
         std::process::Command::new("xdg-open")
-            .arg(&path)
+            .arg(&target)
             .spawn()
             .map_err(|e| e.to_string())?;
     }

@@ -157,13 +157,28 @@ export const SettingsPage = () => {
 
                         {/* Post-Download Action Placeholder (Example: Open folder) */}
                         <div className="flex flex-col gap-3">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Smart Clipboard Detection</span>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 p-3 rounded-xl bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/5 text-xs text-slate-500 dark:text-gray-400">
+                                    Show download prompt when URL is copied
+                                </div>
+                                <button
+                                    onClick={() => updateSettings({ clipboardDetection: !settings.clipboardDetection })}
+                                    className={cn("w-10 h-5 rounded-full transition-colors relative", settings.clipboardDetection ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700')}
+                                >
+                                    <div className={cn("absolute top-0.5 left-0.5 size-4 bg-white rounded-full transition-transform", settings.clipboardDetection ? 'translate-x-5' : '')} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3">
                             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Post-Download Action</span>
                             <div className="flex items-center gap-3">
                                 <div className="flex-1 p-3 rounded-xl bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/5 text-xs text-slate-500 dark:text-gray-400">
                                     Show in folder after completion
                                 </div>
                                 <button
-                                    className="w-10 h-5 rounded-full bg-gray-300 dark:bg-gray-700 relative"
+                                    className="w-10 h-5 rounded-full bg-gray-300 dark:bg-gray-700 relative pointer-events-none opacity-50"
                                     onClick={() => { }} // TODO: Implement if needed
                                 >
                                     <div className="absolute top-0.5 left-0.5 size-4 bg-white rounded-full translate-x-5" />

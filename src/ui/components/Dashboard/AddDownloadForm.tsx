@@ -5,9 +5,11 @@ import { ArrowRight, Link, ListPlus, FolderOpen } from "lucide-react";
 import { useDownloadStore } from "@/state/useDownloadStore";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
+import { cn } from "@/utils/cn";
 
 export const AddDownloadForm = () => {
     const [url, setUrl] = useState("");
+    const [batchMode, setBatchMode] = useState(false);
     const isAnalyzing = useDownloadStore(state => state.isAnalyzing);
     const analyzeUrl = useDownloadStore(state => state.analyzeUrl);
     const downloadPath = useDownloadStore(state => state.downloadPath);
@@ -22,17 +24,25 @@ export const AddDownloadForm = () => {
         }
     }, [prefillUrl, setPrefillUrl]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (url) {
-            analyzeUrl(url);
+            if (batchMode) {
+                const urls = url.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+                for (const u of urls) {
+                    await analyzeUrl(u);
+                }
+            } else {
+                analyzeUrl(url);
+            }
             setUrl(""); // Clear input after analyze
+            if (batchMode) setBatchMode(false);
         }
     };
 
     const tryAutoPaste = async () => {
         // Auto-paste from clipboard if input is empty
-        if (!url) {
+        if (!url && !batchMode) {
             try {
                 const clipboardText = await readText();
                 if (clipboardText && (clipboardText.startsWith("http://") || clipboardText.startsWith("https://") || clipboardText.includes("www."))) {
@@ -62,7 +72,9 @@ export const AddDownloadForm = () => {
 
             <div className="relative flex flex-col p-6 rounded-2xl bg-white dark:bg-[#1e1b2e]/80 backdrop-blur-xl border border-gray-100 dark:border-glass-border shadow-2xl gap-4">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-slate-900 dark:text-white font-bold text-lg">New Download</h3>
+                    <h3 className="text-slate-900 dark:text-white font-bold text-lg">
+                        {batchMode ? "New Batch Download" : "New Download"}
+                    </h3>
                     <div className="flex gap-2">
                         <Button
                             type="button"
@@ -76,31 +88,56 @@ export const AddDownloadForm = () => {
                                 {downloadPath ? downloadPath.split(/[/\\]/).pop() : "Choose Folder"}
                             </span>
                         </Button>
-                        <Button type="button" variant="ghost" size="sm" className="h-auto py-1 px-2 text-primary hover:text-primary/80 dark:hover:text-purple-400 font-bold">
+                        <Button
+                            type="button"
+                            variant={batchMode ? "default" : "ghost"}
+                            size="sm"
+                            className={cn(
+                                "h-auto py-1 px-2 font-bold transition-all",
+                                batchMode ? "bg-primary text-white" : "text-primary hover:text-primary/80 dark:hover:text-purple-400"
+                            )}
+                            onClick={() => setBatchMode(!batchMode)}
+                        >
                             <ListPlus size={16} className="mr-1.5" />
                             Batch Mode
                         </Button>
                     </div>
                 </div>
 
-                <div className="flex w-full items-center gap-2">
+                <div className="flex w-full items-start gap-2">
                     <div className="relative flex-1">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
+                        <div className={cn(
+                            "absolute left-0 pl-4 flex items-center pointer-events-none z-10",
+                            batchMode ? "top-4" : "inset-y-0"
+                        )}>
                             <Link className="text-slate-400 dark:text-[#a19db9]" size={20} />
                         </div>
-                        <Input
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                            onFocus={tryAutoPaste}
-                            onClick={tryAutoPaste}
-                            className="pl-12 py-6 text-base rounded-xl bg-gray-100 dark:bg-[#131022] border-gray-200 dark:border-glass-border focus-visible:ring-primary text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500"
-                            placeholder="Paste video URL from YouTube, TikTok, Vimeo..."
-                        />
+                        {batchMode ? (
+                            <textarea
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                className="w-full pl-12 py-4 text-sm rounded-xl bg-gray-100 dark:bg-[#131022] border-gray-200 dark:border-glass-border focus-visible:ring-primary text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 min-h-[120px] font-mono scrollbar-none"
+                                placeholder={"Paste multiple URLs here...\nOne per line"}
+                                autoFocus
+                            />
+                        ) : (
+                            <Input
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                onFocus={tryAutoPaste}
+                                onClick={tryAutoPaste}
+                                className="pl-12 py-6 text-base rounded-xl bg-gray-100 dark:bg-[#131022] border-gray-200 dark:border-glass-border focus-visible:ring-primary text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500"
+                                placeholder="Paste video URL from YouTube, TikTok, Vimeo..."
+                            />
+                        )}
                     </div>
                     <Button
                         type="submit"
                         size="lg"
-                        className="h-[52px] rounded-xl px-8 shadow-lg shadow-primary/30 font-bold gap-2"
+                        className={cn(
+                            "rounded-xl px-8 shadow-lg shadow-primary/30 font-bold gap-2",
+                            batchMode ? "h-12 mt-auto" : "h-[52px]"
+                        )}
                         disabled={isAnalyzing}
                     >
                         {isAnalyzing ? "Analyzing..." : "Analyze"}

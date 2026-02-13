@@ -35,6 +35,7 @@ interface DownloadState {
         concurrencyMode: boolean; // true = limit enabled
         cookies: string | null;
         theme: 'dark' | 'light' | 'system';
+        clipboardDetection: boolean;
     };
 
     // Actions
@@ -70,7 +71,8 @@ export const useDownloadStore = create<DownloadState>()(
                 maxConcurrent: 2,
                 concurrencyMode: true,
                 cookies: null,
-                theme: 'dark'
+                theme: 'dark',
+                clipboardDetection: true
             },
 
             setPrefillUrl: (url) => set({ prefillUrl: url }),
@@ -132,7 +134,8 @@ export const useDownloadStore = create<DownloadState>()(
                                     eta: formatETA(payload.eta),
                                     status: payload.status,
                                     totalSize: formatBytes(payload.total_size),
-                                    downloadedBytes: payload.downloaded_bytes ?? newTasks[idx].downloadedBytes
+                                    downloadedBytes: payload.downloaded_bytes ?? newTasks[idx].downloadedBytes,
+                                    filePath: payload.final_path ?? newTasks[idx].filePath
                                 };
                                 updated = true;
                             }
@@ -167,6 +170,7 @@ export const useDownloadStore = create<DownloadState>()(
                                 speed: formatSpeed(payload.speed),
                                 eta: formatETA(payload.eta),
                                 totalSize: formatBytes(payload.total_size),
+                                filePath: payload.final_path,
                                 error: payload.error_message || (payload.status === 'error' ? 'Download failed' : undefined)
                             };
                             return { tasks: newTasks };
@@ -367,7 +371,9 @@ export const useDownloadStore = create<DownloadState>()(
             openFolder: async (id: string) => {
                 const { tasks } = get();
                 const task = tasks.find(t => t.id === id);
-                if (task?.downloadDir) {
+                if (task?.filePath) {
+                    await api.showInFolder(task.filePath);
+                } else if (task?.downloadDir) {
                     await api.showInFolder(task.downloadDir);
                 } else {
                     // Fallback? Maybe strict no-op if no path.

@@ -23,6 +23,7 @@ export interface Download {
     error?: string;
     formatSpec?: string;
     downloadDir?: string;
+    filePath?: string;
     thumbnail?: string;
     duration?: number;
     totalSize?: string;
@@ -40,6 +41,7 @@ export interface DownloadProgressPayload {
     downloaded_bytes: number | null;
     can_retry?: boolean;
     error_message?: string;
+    final_path?: string;
     version: number;
 }
 
