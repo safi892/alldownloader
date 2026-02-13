@@ -34,21 +34,21 @@ You can download the latest version of VidFlow from our **Releases** page:
 
 👉 **[Download VidFlow here](https://github.com/safi892/alldownloader/releases)**
 
-### 🖥️ Which file do I download?
+### 🖥️ Direct Download
 
-Depending on your computer, choose the file that ends with:
+Choose the right version for your computer:
 
-- **Windows:** 
-    - `...setup.exe` or `...en-US.msi` (Standard installers for Windows).
+- **Windows:** [⬇️ Download for Windows (.exe)](https://github.com/safi892/alldownloader/releases/download/v0.1.0/VidFlow_0.1.0_x64-setup.exe)
 - **macOS (Apple Mac):**
-    - `...aarch64.dmg` (If you have a newer M1, M2, or M3 Mac).
-    - `...x64.dmg` (If you have an older Intel Mac).
+    - [⬇️ Download for M1/M2/M3 Mac](https://github.com/safi892/alldownloader/releases/download/v0.1.0/VidFlow_0.1.0_aarch64.dmg)
+    - [⬇️ Download for Intel Mac](https://github.com/safi892/alldownloader/releases/download/v0.1.0/VidFlow_0.1.0_x64.dmg)
 - **Linux:**
-    - `...amd64.deb` (For Ubuntu, Debian, or Mint).
-    - `...amd64.AppImage` (Works on almost any Linux version).
-    - `...x86_64.rpm` (For Fedora or RedHat).
+    - [⬇️ Download for Ubuntu/Debian (.deb)](https://github.com/safi892/alldownloader/releases/download/v0.1.0/VidFlow_0.1.0_amd64.deb)
+    - [⬇️ Download Universal Linux (.AppImage)](https://github.com/safi892/alldownloader/releases/download/v0.1.0/VidFlow_0.1.0_amd64.AppImage)
 
-1.  Open the file and follow the simple steps to install it.
+*Can't find your version? Check all [Release Assets](https://github.com/safi892/alldownloader/releases/tag/v0.1.0).*
+
+1.  Open the downloaded file and follow the simple steps to install it.
 2.  Start downloading!
 
 ---
