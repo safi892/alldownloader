@@ -32,7 +32,7 @@ Your video will be saved to your computer, ready for you to watch.
 
 You can download the latest version of VidFlow from our **Releases** page:
 
-👉 **[Download VidFlow here](https://github.com/TODO_REPLACE_WITH_YOUR_REPO/vidflow/releases)**
+👉 **[Download VidFlow here](https://github.com/safi892/alldownloader/releases)**
 
 1.  Choose the file for your computer (Windows, Mac, or Linux).
 2.  Open the file and follow the simple steps to install it.
