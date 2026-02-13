@@ -34,9 +34,22 @@ You can download the latest version of VidFlow from our **Releases** page:
 
 👉 **[Download VidFlow here](https://github.com/safi892/alldownloader/releases)**
 
-1.  Choose the file for your computer (Windows, Mac, or Linux).
-2.  Open the file and follow the simple steps to install it.
-3.  Start downloading!
+### 🖥️ Which file do I download?
+
+Depending on your computer, choose the file that ends with:
+
+- **Windows:** 
+    - `...setup.exe` or `...en-US.msi` (Standard installers for Windows).
+- **macOS (Apple Mac):**
+    - `...aarch64.dmg` (If you have a newer M1, M2, or M3 Mac).
+    - `...x64.dmg` (If you have an older Intel Mac).
+- **Linux:**
+    - `...amd64.deb` (For Ubuntu, Debian, or Mint).
+    - `...amd64.AppImage` (Works on almost any Linux version).
+    - `...x86_64.rpm` (For Fedora or RedHat).
+
+1.  Open the file and follow the simple steps to install it.
+2.  Start downloading!
 
 ---
 
