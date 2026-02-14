@@ -6,6 +6,11 @@ VidFlow is a clean and fast app that helps you save your favorite videos from th
 
 ---
 
+![VidFlow Dashboard](images/screen.png)
+
+![VidFlow History](images/hist.png)
+
+
 ## ✨ Why you'll love VidFlow
 
 - **🚀 Really Fast**: We use smart technology to make sure your videos download as quickly as your internet allows.
