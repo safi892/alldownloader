@@ -42,11 +42,7 @@
       "bin/yt-dlp",
       "bin/yt-dlp-wrapper",
       "bin/ffmpeg",
-      "bin/ffprobe",
-      "bin/yt-dlp.exe",
-      "bin/yt-dlp-wrapper.exe",
-      "bin/ffmpeg.exe",
-      "bin/ffprobe.exe"
+      "bin/ffprobe"
     ]
   }
 }
