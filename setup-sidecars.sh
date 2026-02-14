@@ -57,12 +57,13 @@ curl -L "$FFPROBE_URL" -o "src-tauri/bin/ffprobe-$TRIPLE$SUFFIX"
 chmod +x src-tauri/bin/*
 
 # Create wrapper script for yt-dlp (macOS and Linux)
+# Note: Tauri strips platform suffixes when copying to target/debug
 if [ "$OS" == "Darwin" ] || [ "$OS" == "Linux" ]; then
     echo "Creating yt-dlp wrapper script..."
     cat > "src-tauri/bin/yt-dlp-wrapper-$TRIPLE$SUFFIX" << EOF
 #!/bin/bash
 DIR="\$(cd "\$(dirname "\$0")" && pwd)"
-exec "\$DIR/yt-dlp-$TRIPLE$SUFFIX" "\$@"
+exec "\$DIR/yt-dlp" "\$@"
 EOF
     chmod +x "src-tauri/bin/yt-dlp-wrapper-$TRIPLE$SUFFIX"
 fi

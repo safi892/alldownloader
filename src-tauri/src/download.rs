@@ -193,24 +193,31 @@ impl DownloadManager {
         }
     }
 
-    pub async fn get_video_metadata<R: Runtime>(&self, app: AppHandle<R>, url: String) -> Result<VideoMetadata, String> {
+    pub async fn get_video_metadata<R: Runtime>(&self, _app: AppHandle<R>, url: String) -> Result<VideoMetadata, String> {
         log::info!("[METADATA] Starting analysis for URL: {}", url);
         let max_items = SYSTEM_GUARDRAILS.max_playlist_items.to_string();
         
-        log::info!("[METADATA] Creating sidecar command...");
-        
-        // Debug: print the path to the sidecar
-        let sidecar_path = app.path().resource_dir()
-            .map(|p| p.join("yt-dlp-wrapper"))
+        // Try to find yt-dlp directly from the executable's directory (works in both dev and production)
+        let exe_path = std::env::current_exe()
             .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "unknown".to_string());
-        log::info!("[METADATA] Resource dir: {}", sidecar_path);
+            .unwrap_or_else(|e| format!("error: {}", e));
+        log::info!("[METADATA] Executable path: {}", exe_path);
         
-        let output = app.shell().sidecar("yt-dlp-wrapper")
-            .map_err(|e| {
-                log::error!("[METADATA] Failed to create sidecar: {}", e);
-                e.to_string()
-            })?
+        let yt_dlp_path = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.join("yt-dlp").to_string_lossy().to_string()))
+            .unwrap_or_else(|| "yt-dlp".to_string());
+        
+        log::info!("[METADATA] Using yt-dlp at: {}", yt_dlp_path);
+        
+        // Check if yt-dlp exists
+        if std::path::Path::new(&yt_dlp_path).exists() {
+            log::info!("[METADATA] yt-dlp EXISTS at path");
+        } else {
+            log::warn!("[METADATA] yt-dlp NOT FOUND at path, will search in PATH");
+        }
+        
+        let output = tokio::process::Command::new(&yt_dlp_path)
             .args(["-J", "--flat-playlist", "--no-warnings", "--playlist-end", &max_items, &url])
             .output()
             .await
@@ -497,12 +504,26 @@ impl DownloadManager {
             tauri::async_runtime::spawn(async move {
                 let fragments = SYSTEM_GUARDRAILS.default_fragments.to_string();
                 
-                // Get the directory where sidecars are located (same dir as the executable)
-                let exe_dir = std::env::current_exe()
+                // Get ffmpeg path from Tauri's resource directory (works in both dev and production)
+                let ffmpeg_path = app_inner.path().resource_dir()
                     .ok()
-                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                    .unwrap_or_else(|| std::path::PathBuf::from("."));
-                let ffmpeg_path = exe_dir.join("ffmpeg").to_string_lossy().to_string();
+                    .and_then(|p| {
+                        // In production, sidecars are in the resource dir
+                        // Tauri automatically strips platform suffixes
+                        let ffmpeg_binary = p.join("ffmpeg");
+                        if ffmpeg_binary.exists() {
+                            Some(ffmpeg_binary.to_string_lossy().to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| {
+                        // Fallback: try to find ffmpeg in the same directory as the executable
+                        std::env::current_exe()
+                            .ok()
+                            .and_then(|p| p.parent().map(|p| p.join("ffmpeg").to_string_lossy().to_string()))
+                            .unwrap_or_else(|| "ffmpeg".to_string())
+                    });
                 
                 let mut args = vec![
                     "--newline",
@@ -562,9 +583,18 @@ impl DownloadManager {
                 
                 args.push(&url_inner);
 
-                let sidecar_command = app_inner.shell().sidecar("yt-dlp-wrapper").map_err(|e| e.to_string()).expect("Failed to create sidecar command").args(args);
+                // Get yt-dlp path from executable directory (works in both dev and production)
+                let yt_dlp_path = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|p| p.join("yt-dlp").to_string_lossy().to_string()))
+                    .unwrap_or_else(|| "yt-dlp".to_string());
+                
+                log::info!("[DOWNLOAD] Using yt-dlp at: {}", yt_dlp_path);
 
-                match sidecar_command.spawn() {
+                match app_inner.shell()
+                    .command(yt_dlp_path)
+                    .args(args)
+                    .spawn() {
                     Ok((mut rx, child)) => {
                         {
                             let mut task = task_ref.lock().unwrap();

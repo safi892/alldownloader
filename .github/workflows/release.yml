@@ -34,88 +34,63 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: setup node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
-      - name: install Rust stable
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: install dependencies (ubuntu only)
+      - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: install frontend dependencies
+      - name: Install frontend dependencies
         run: npm install
 
-      - name: download sidecars
+      - name: Download sidecar binaries
         shell: bash
         run: |
           mkdir -p src-tauri/bin
-          
           TRIPLE="${{ matrix.suffix }}"
           
           if [ "${{ matrix.platform }}" == "macos-latest" ]; then
-            echo "Downloading yt-dlp for $TRIPLE..."
+            # yt-dlp
             curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
-            echo "Downloading ffmpeg for $TRIPLE..."
-            curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg-$TRIPLE
-            curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffprobe-$TRIPLE
-            
-            # Create wrapper script
+            # ffmpeg / ffprobe
+            if [ "${{ matrix.arch }}" == "aarch64" ]; then
+              curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg-$TRIPLE
+              curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-arm64 -o src-tauri/bin/ffprobe-$TRIPLE
+            else
+              curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
+              curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-x64 -o src-tauri/bin/ffprobe-$TRIPLE
+            fi
+            # wrapper
             echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
             echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo "exec \"\$DIR/yt-dlp-\$TRIPLE\" \"\$@\"" >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            chmod +x src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            
+            echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
           elif [ "${{ matrix.platform }}" == "ubuntu-22.04" ]; then
-            echo "Downloading yt-dlp for $TRIPLE..."
             curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp-$TRIPLE
-            echo "Downloading ffmpeg for $TRIPLE..."
             curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
-            curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffprobe-$TRIPLE
-            
-            # Create wrapper script
+            curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/linux-x64 -o src-tauri/bin/ffprobe-$TRIPLE
             echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
             echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo "exec \"\$DIR/yt-dlp-\$TRIPLE\" \"\$@\"" >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            chmod +x src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            
+            echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
           elif [ "${{ matrix.platform }}" == "windows-latest" ]; then
-            echo "Downloading yt-dlp for $TRIPLE..."
             curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o src-tauri/bin/yt-dlp-$TRIPLE.exe
-            echo "Downloading ffmpeg for $TRIPLE..."
             curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg-$TRIPLE.exe
             curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe-$TRIPLE.exe
-            
-            # For Windows, create copy as wrapper
             cp src-tauri/bin/yt-dlp-$TRIPLE.exe src-tauri/bin/yt-dlp-wrapper-$TRIPLE.exe
-          fi
-          
+
           chmod +x src-tauri/bin/* || true
-          echo "Downloaded binaries:"
           ls -la src-tauri/bin/
 
-      - name: verify sidecars (Unix)
-        if: matrix.platform != 'windows-latest'
-        shell: bash
-        run: |
-          TRIPLE="${{ matrix.suffix }}"
-          echo "Verifying binaries for $TRIPLE..."
-          
-          if ./src-tauri/bin/yt-dlp-wrapper-$TRIPLE --version; then
-            echo "✅ yt-dlp wrapper works"
-          else
-            echo "❌ yt-dlp wrapper failed"
-            exit 1
-          fi
-
-      - name: build Tauri app
+      - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -128,16 +103,39 @@ jobs:
             Choose the appropriate version for your operating system:
             
             ### macOS
-            - **Apple Silicon (M1/M2/M3)**: Download `VidFlow_*_aarch64.dmg`
-            - **Intel Mac**: Download `VidFlow_*_x64.dmg`
+            - Apple Silicon (M1/M2/M3): `VidFlow_aarch64.zip`
+            - Intel Mac: `VidFlow_x86_64.zip`
             
-            **Note for macOS users**: If you see "cannot be opened because the developer cannot be verified", right-click the app and select "Open".
+            **Instructions for macOS users:**  
+            1. Download the ZIP  
+            2. Extract it  
+            3. Right-click → Open → Click Open (bypasses Gatekeeper)
             
             ### Windows
-            - Download `VidFlow_*_x64-setup.exe` and run the installer
+            - `VidFlow_x86_64-setup.exe`
             
             ### Linux
-            - **Ubuntu/Debian**: Download `VidFlow_*_amd64.deb` and install with `sudo dpkg -i VidFlow_*.deb`
+            - `VidFlow_x86_64.deb` or `.AppImage`
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Prepare macOS ZIP (for free distribution)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Extract version from tag (e.g., v1.0.0 -> 1.0.0)
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          cp -R src-tauri/target/release/bundle/macos/VidFlow.app VidFlow.app
+          xattr -dr com.apple.quarantine VidFlow.app || true
+          chmod -R +x VidFlow.app/Contents/MacOS/*
+          zip -r VidFlow_${{ matrix.arch }}.zip VidFlow.app
+
+      - name: Upload macOS ZIP to Release
+        if: matrix.platform == 'macos-latest'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.VERSION }}
+          files: VidFlow_${{ matrix.arch }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
