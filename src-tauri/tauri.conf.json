@@ -35,6 +35,7 @@
     ],
     "externalBin": [
       "bin/yt-dlp",
+      "bin/yt-dlp-wrapper",
       "bin/ffmpeg",
       "bin/ffprobe"
     ]

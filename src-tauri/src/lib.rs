@@ -58,27 +58,33 @@ pub fn run() {
             
             tauri::async_runtime::spawn(async move {
                 let shell = app_handle.shell();
-                // Check yt-dlp
-                match shell.command("yt-dlp").args(["--version"]).output().await {
-                    Ok(output) if output.status.success() => {
-                        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                        // Minimal version check (e.g. 2023.01.01)
-                        if version < "2023.01.01".to_string() {
-                             let _ = app_handle.emit("binary-error", format!("yt-dlp version {} is too old. Please update to at least 2023.01.01.", version));
+                // Check yt-dlp sidecar
+                match shell.sidecar("yt-dlp-wrapper") {
+                    Ok(cmd) => {
+                        match cmd.args(["--version"]).output().await {
+                            Ok(output) if output.status.success() => {
+                                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                                if version < "2023.01.01".to_string() {
+                                     let _ = app_handle.emit("binary-error", format!("yt-dlp version {} is too old. Please update to at least 2023.01.01.", version));
+                                }
+                            },
+                            _ => {
+                                let _ = app_handle.emit("binary-error", "yt-dlp sidecar failed to execute. Permissions or architecture mismatch?");
+                            }
                         }
                     },
-                    _ => {
-                        let _ = app_handle.emit("binary-error", "yt-dlp not found in PATH. Core download functionality will be unavailable.");
+                    Err(_) => {
+                        let _ = app_handle.emit("binary-error", "yt-dlp sidecar not found. Did you run setup-sidecars.sh?");
                     }
                 }
 
-                // Check ffmpeg
-                match shell.command("ffmpeg").args(["-version"]).output().await {
-                    Ok(output) if output.status.success() => {
-                        // Check for specific codecs/features if necessary
+                // Check ffmpeg sidecar
+                match shell.sidecar("ffmpeg") {
+                    Ok(cmd) => {
+                        let _ = cmd.args(["-version"]).output().await;
                     },
-                    _ => {
-                        let _ = app_handle.emit("binary-error", "ffmpeg not found in PATH. Merging and post-processing will be unavailable.");
+                    Err(_) => {
+                        let _ = app_handle.emit("binary-error", "ffmpeg sidecar not found. Merging and post-processing will be unavailable.");
                     }
                 }
             });

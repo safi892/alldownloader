@@ -13,14 +13,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # for Arm64 (Apple Silicon)
+          - platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest" # for Intel
+            arch: "aarch64"
+          - platform: "macos-latest"
             args: "--target x86_64-apple-darwin"
+            arch: "x86_64"
           - platform: "ubuntu-22.04"
             args: ""
+            arch: "x86_64"
           - platform: "windows-latest"
             args: ""
+            arch: "x86_64"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -52,40 +56,159 @@ jobs:
           
           # Determine target triple
           if [ "${{ matrix.platform }}" == "macos-latest" ]; then
-            if [ "${{ matrix.args }}" == "--target aarch64-apple-darwin" ]; then
+            if [ "${{ matrix.arch }}" == "aarch64" ]; then
               TRIPLE="aarch64-apple-darwin"
-              # yt-dlp macos (universal or specific)
+              echo "Downloading yt-dlp for Apple Silicon..."
               curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
-              # ffmpeg macos (we need a static build)
+              echo "Downloading ffmpeg for Apple Silicon..."
               curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg-$TRIPLE
               curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffprobe-$TRIPLE
             else
               TRIPLE="x86_64-apple-darwin"
+              echo "Downloading yt-dlp for Intel Mac..."
               curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
+              echo "Downloading ffmpeg for Intel Mac..."
               curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
               curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffprobe-$TRIPLE
             fi
+            
+            # Create wrapper script for yt-dlp
+            echo "Creating yt-dlp wrapper script..."
+            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo 'exec "$DIR/yt-dlp-'$TRIPLE'" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            chmod +x src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            
           elif [ "${{ matrix.platform }}" == "ubuntu-22.04" ]; then
             TRIPLE="x86_64-unknown-linux-gnu"
+            echo "Downloading yt-dlp for Linux..."
             curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp-$TRIPLE
+            echo "Downloading ffmpeg for Linux..."
             curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
             curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffprobe-$TRIPLE
+            
+            # Create wrapper script for yt-dlp
+            echo "Creating yt-dlp wrapper script..."
+            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo 'exec "$DIR/yt-dlp-'$TRIPLE'" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            chmod +x src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            
           elif [ "${{ matrix.platform }}" == "windows-latest" ]; then
             TRIPLE="x86_64-pc-windows-msvc"
+            echo "Downloading yt-dlp for Windows..."
             curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o src-tauri/bin/yt-dlp-$TRIPLE.exe
+            echo "Downloading ffmpeg for Windows..."
             curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg-$TRIPLE.exe
             curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe-$TRIPLE.exe
           fi
           
           chmod +x src-tauri/bin/* || true
+          echo "Downloaded binaries:"
+          ls -la src-tauri/bin/
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: verify sidecars (Unix)
+        if: matrix.platform != 'windows-latest'
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" == "macos-latest" ]; then
+            if [ "${{ matrix.arch }}" == "aarch64" ]; then
+              TRIPLE="aarch64-apple-darwin"
+            else
+              TRIPLE="x86_64-apple-darwin"
+            fi
+          else
+            TRIPLE="x86_64-unknown-linux-gnu"
+          fi
+          
+          echo "Verifying binaries for $TRIPLE..."
+          
+          if ./src-tauri/bin/yt-dlp-wrapper-$TRIPLE --version; then
+            echo "✅ yt-dlp wrapper works"
+          else
+            echo "❌ yt-dlp wrapper failed"
+            exit 1
+          fi
+          
+          if ./src-tauri/bin/ffmpeg-$TRIPLE -version | head -1; then
+            echo "✅ ffmpeg works"
+          else
+            echo "❌ ffmpeg failed"
+            exit 1
+          fi
+
+      - name: verify sidecars (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: powershell
+        run: |
+          $TRIPLE = "x86_64-pc-windows-msvc"
+          Write-Host "Verifying binaries for $TRIPLE..."
+          
+          try {
+            $version = & .\src-tauri\bin\yt-dlp-$TRIPLE.exe --version 2>&1
+            Write-Host "✅ yt-dlp version: $version"
+          } catch {
+            Write-Host "❌ yt-dlp failed: $_"
+            exit 1
+          }
+          
+          try {
+            $version = & .\src-tauri\bin\ffmpeg-$TRIPLE.exe -version 2>&1 | Select-Object -First 1
+            Write-Host "✅ ffmpeg: $version"
+          } catch {
+            Write-Host "❌ ffmpeg failed: $_"
+            exit 1
+          }
+
+      - name: import Apple Developer Certificate
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "Importing Apple Developer Certificate..."
+            echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+            security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+            security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+            echo "Certificate imported successfully"
+          else
+            echo "No Apple Developer Certificate found - will use ad-hoc signing"
+          fi
+
+      - name: build Tauri app
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version
+          tagName: v__VERSION__
           releaseName: "VidFlow v__VERSION__"
-          releaseBody: "See the assets below to download VidFlow for your platform."
+          releaseBody: |
+            ## Download VidFlow
+            
+            Choose the appropriate version for your operating system:
+            
+            ### macOS
+            - **Apple Silicon (M1/M2/M3)**: Download `VidFlow_*_aarch64.dmg`
+            - **Intel Mac**: Download `VidFlow_*_x64.dmg`
+            
+            **Note for macOS users**: If you see "cannot be opened because the developer cannot be verified", right-click the app and select "Open".
+            
+            ### Windows
+            - Download `VidFlow_*_x64-setup.exe` and run the installer
+            
+            ### Linux
+            - **Ubuntu/Debian**: Download `VidFlow_*_amd64.deb` and install with `sudo dpkg -i VidFlow_*.deb`
+            - **Other distributions**: Download `VidFlow_*_amd64.AppImage`, make it executable with `chmod +x VidFlow_*.AppImage`, then run it
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

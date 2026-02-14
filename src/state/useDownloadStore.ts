@@ -147,11 +147,16 @@ export const useDownloadStore = create<DownloadState>()(
 
                 await listen<DownloadProgressPayload>("download-progress", (event) => {
                     const payload = event.payload;
+                    console.log("[DEBUG] Received download-progress event:", payload.id, payload.status, payload.progress);
 
                     if (['completed', 'error', 'cancelled'].includes(payload.status)) {
                         set((state) => {
                             const idx = state.tasks.findIndex(t => t.id === payload.id);
-                            if (idx === -1) return {};
+                            console.log("[DEBUG] Looking for task with ID:", payload.id, "Found at index:", idx, "Total tasks:", state.tasks.length);
+                            if (idx === -1) {
+                                console.log("[DEBUG] Task IDs in state:", state.tasks.map(t => t.id));
+                                return {};
+                            }
 
                             const task = state.tasks[idx];
                             if (payload.status === 'completed' && task.status !== 'completed' && hasPermission) {
@@ -281,6 +286,8 @@ export const useDownloadStore = create<DownloadState>()(
                                 format: nextTask.formatSpec,
                                 cookies: settings.cookies
                             });
+
+                            console.log("[DEBUG] Updating task ID from", nextTask.id, "to", realId);
 
                             // Update to real ID from backend and set to downloading
                             // The backend starts immediately, so we move to downloading

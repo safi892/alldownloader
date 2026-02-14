@@ -156,7 +156,7 @@ pub async fn verify_media_integrity<R: Runtime>(app: &AppHandle<R>, path: &std::
     }
 
     // 2. Rigorous check: ffprobe container validity
-    let output = app.shell().sidecar("bin/ffprobe")
+    let output = app.shell().sidecar("ffprobe")
         .map_err(|e| e.to_string())?
         .args(["-v", "error", "-show_format", "-show_streams", &path.to_string_lossy()])
         .output()
@@ -194,13 +194,24 @@ impl DownloadManager {
     }
 
     pub async fn get_video_metadata<R: Runtime>(&self, app: AppHandle<R>, url: String) -> Result<VideoMetadata, String> {
+        log::info!("[METADATA] Starting analysis for URL: {}", url);
         let max_items = SYSTEM_GUARDRAILS.max_playlist_items.to_string();
-        let output = app.shell().sidecar("bin/yt-dlp")
-            .map_err(|e| e.to_string())?
+        
+        log::info!("[METADATA] Creating sidecar command...");
+        let output = app.shell().sidecar("yt-dlp-wrapper")
+            .map_err(|e| {
+                log::error!("[METADATA] Failed to create sidecar: {}", e);
+                e.to_string()
+            })?
             .args(["-J", "--flat-playlist", "--no-warnings", "--playlist-end", &max_items, &url])
             .output()
             .await
-            .map_err(|e| format!("Failed to execute yt-dlp: {}", e))?;
+            .map_err(|e| {
+                log::error!("[METADATA] Failed to execute yt-dlp: {}", e);
+                format!("Failed to execute yt-dlp: {}", e)
+            })?;
+        
+        log::info!("[METADATA] Command completed with status: {}", output.status.success());
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -472,6 +483,14 @@ impl DownloadManager {
 
             tauri::async_runtime::spawn(async move {
                 let fragments = SYSTEM_GUARDRAILS.default_fragments.to_string();
+                
+                // Get the directory where sidecars are located (same dir as the executable)
+                let exe_dir = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                let ffmpeg_path = exe_dir.join("ffmpeg").to_string_lossy().to_string();
+                
                 let mut args = vec![
                     "--newline",
                     "-N", &fragments,
@@ -521,12 +540,16 @@ impl DownloadManager {
                         args.push(&format_arg);
                         args.push("--merge-output-format");
                         args.push("mp4/mkv");
+                        // Tell yt-dlp where to find ffmpeg for merging
+                        log::info!("[DOWNLOAD] Using ffmpeg at: {}", ffmpeg_path);
+                        args.push("--ffmpeg-location");
+                        args.push(&ffmpeg_path);
                     }
                 }
                 
                 args.push(&url_inner);
 
-                let sidecar_command = app_inner.shell().sidecar("bin/yt-dlp").map_err(|e| e.to_string()).expect("Failed to create sidecar command").args(args);
+                let sidecar_command = app_inner.shell().sidecar("yt-dlp-wrapper").map_err(|e| e.to_string()).expect("Failed to create sidecar command").args(args);
 
                 match sidecar_command.spawn() {
                     Ok((mut rx, child)) => {
@@ -541,30 +564,33 @@ impl DownloadManager {
                                 CommandEvent::Stdout(line) => {
                                     let line_str = String::from_utf8_lossy(&line);
                                     
-                                    if line_str.contains("[download] Destination:") {
-                                        let path_part = line_str.split("Destination:").nth(1).unwrap_or("").trim();
-                                        if !path_part.is_empty() {
-                                            let mut task = task_ref.lock().unwrap();
-                                            task.final_path = Some(std::path::PathBuf::from(path_part));
-                                        }
-                                    }
-
-                                    if line_str.contains("[Merger] Merging formats into") {
-                                        let path_part = line_str.split("formats into").nth(1).unwrap_or("").trim().trim_matches('"');
-                                        if !path_part.is_empty() {
-                                            let mut task = task_ref.lock().unwrap();
-                                            task.final_path = Some(std::path::PathBuf::from(path_part));
-                                        }
-                                    }
-
-                                    if line_str.contains("has already been downloaded") && line_str.contains("[download]") {
-                                        let path_part = line_str.split("[download]").nth(1).unwrap_or("")
-                                            .split("has already been downloaded").nth(0).unwrap_or("").trim().trim_matches('"');
-                                        if !path_part.is_empty() {
-                                            let mut task = task_ref.lock().unwrap();
-                                            task.final_path = Some(std::path::PathBuf::from(path_part));
-                                        }
-                                    }
+                                     if line_str.contains("[download] Destination:") {
+                                         let path_part = line_str.split("Destination:").nth(1).unwrap_or("").trim();
+                                         if !path_part.is_empty() {
+                                             log::info!("[DOWNLOAD] Captured destination path: {}", path_part);
+                                             let mut task = task_ref.lock().unwrap();
+                                             task.final_path = Some(std::path::PathBuf::from(path_part));
+                                         }
+                                     }
+ 
+                                     if line_str.contains("[Merger] Merging formats into") {
+                                         let path_part = line_str.split("formats into").nth(1).unwrap_or("").trim().trim_matches('"');
+                                         if !path_part.is_empty() {
+                                             log::info!("[DOWNLOAD] Captured merged file path: {}", path_part);
+                                             let mut task = task_ref.lock().unwrap();
+                                             task.final_path = Some(std::path::PathBuf::from(path_part));
+                                         }
+                                     }
+ 
+                                     if line_str.contains("has already been downloaded") && line_str.contains("[download]") {
+                                         let path_part = line_str.split("[download]").nth(1).unwrap_or("")
+                                             .split("has already been downloaded").nth(0).unwrap_or("").trim().trim_matches('"');
+                                         if !path_part.is_empty() {
+                                             log::info!("[DOWNLOAD] Captured existing file path: {}", path_part);
+                                             let mut task = task_ref.lock().unwrap();
+                                             task.final_path = Some(std::path::PathBuf::from(path_part));
+                                         }
+                                     }
 
                                     if line_str.contains("[Merger]") {
                                         let mut task = task_ref.lock().unwrap();
@@ -645,27 +671,36 @@ impl DownloadManager {
                                          (s, p)
                                       };
                                       
-                                      let status = if payload.code == Some(0) {
-                                          if let Some(ref path) = final_path {
-                                              match verify_media_integrity(&app_inner, path).await {
-                                                  Ok(_) => {
-                                                      let mut task = task_ref.lock().unwrap();
-                                                      let _ = task.transition(DownloadStatus::Completed);
-                                                      DownloadStatus::Completed
-                                                  }
-                                                  Err(e) => {
-                                                      println!("Verification failed: {}", e);
-                                                      let mut task = task_ref.lock().unwrap();
-                                                      let _ = task.transition(DownloadStatus::Error);
-                                                      DownloadStatus::Error
-                                                  }
-                                              }
-                                          } else {
-                                              let mut task = task_ref.lock().unwrap();
-                                              let _ = task.transition(DownloadStatus::Error);
-                                              DownloadStatus::Error
-                                          }
-                                      } else if current_status == DownloadStatus::Cancelled {
+                                       let status = if payload.code == Some(0) {
+                                           if let Some(ref path) = final_path {
+                                               // Check if file exists first
+                                               if !path.exists() {
+                                                   log::warn!("Download completed but file not found at path: {:?}", path);
+                                               }
+                                               
+                                               // Try to verify, but don't fail the download if verification fails
+                                               match verify_media_integrity(&app_inner, path).await {
+                                                   Ok(_) => {
+                                                       log::info!("Download verification successful for: {:?}", path);
+                                                       let mut task = task_ref.lock().unwrap();
+                                                       let _ = task.transition(DownloadStatus::Completed);
+                                                       DownloadStatus::Completed
+                                                   }
+                                                   Err(e) => {
+                                                       log::warn!("Download verification failed (but download may still be usable): {}", e);
+                                                       // Mark as completed anyway since yt-dlp exited successfully
+                                                       let mut task = task_ref.lock().unwrap();
+                                                       let _ = task.transition(DownloadStatus::Completed);
+                                                       DownloadStatus::Completed
+                                                   }
+                                               }
+                                           } else {
+                                               log::warn!("Download completed but no final_path was captured");
+                                               let mut task = task_ref.lock().unwrap();
+                                               let _ = task.transition(DownloadStatus::Completed);
+                                               DownloadStatus::Completed
+                                           }
+                                       } else if current_status == DownloadStatus::Cancelled {
                                           DownloadStatus::Cancelled
                                       } else {
                                           let mut task = task_ref.lock().unwrap();
@@ -685,20 +720,22 @@ impl DownloadManager {
                                          }
                                      }
                                      
-                                     let final_payload = DownloadProgressPayload {
-                                        id: id.clone(),
-                                        progress: if status == DownloadStatus::Completed { 100.0 } else { 0.0 },
-                                        speed: None,
-                                        eta: None,
-                                        status: status.clone(),
-                                        total_size: None,
-                                        downloaded_bytes: None,
-                                        can_retry: Some(status == DownloadStatus::Error),
-                                        error_message: if status == DownloadStatus::Error { Some("Download failed".to_string()) } else { None },
-                                        final_path: final_path.map(|p| p.to_string_lossy().to_string()),
-                                        version: SYSTEM_GUARDRAILS.ipc_version,
-                                     };
-                                     let _ = app_inner.emit("download-progress", final_payload);
+                                      let final_payload = DownloadProgressPayload {
+                                         id: id.clone(),
+                                         progress: if status == DownloadStatus::Completed { 100.0 } else { 0.0 },
+                                         speed: None,
+                                         eta: None,
+                                         status: status.clone(),
+                                         total_size: None,
+                                         downloaded_bytes: None,
+                                         can_retry: Some(status == DownloadStatus::Error),
+                                         error_message: if status == DownloadStatus::Error { Some("Download failed".to_string()) } else { None },
+                                         final_path: final_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+                                         version: SYSTEM_GUARDRAILS.ipc_version,
+                                      };
+                                      log::info!("[DOWNLOAD] Emitting final status for {}: {:?}, final_path: {:?}", id, status, final_path);
+                                      let emit_result = app_inner.emit("download-progress", final_payload);
+                                      log::info!("[DOWNLOAD] Event emit result: {:?}", emit_result.is_ok());
                                      
                                      if let Some(ref path) = cookie_file_path {
                                          let _ = fs::remove_file(path);

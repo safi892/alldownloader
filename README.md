@@ -39,9 +39,50 @@ You can download the latest version of VidFlow from our **Releases** page:
 
 👉 **[Download VidFlow here](https://github.com/safi892/alldownloader/releases)**
 
-### 🖥️ Direct Download
+### 🖥️ Installation Instructions
 
-Choose the right version for your computer:
+#### Windows
+1. Download `VidFlow_*_x64-setup.exe`
+2. Double-click the downloaded file
+3. Follow the installation wizard
+4. VidFlow will appear in your Start Menu
+
+**Note:** If Windows shows a "Windows protected your PC" warning, click "More info" and then "Run anyway".
+
+#### macOS (Apple Mac)
+
+**For Apple Silicon Macs (M1, M2, M3, M4):**
+1. Download `VidFlow_*_aarch64.dmg`
+2. Double-click the DMG file
+3. Drag VidFlow to your Applications folder
+4. Open VidFlow from Applications
+
+**For Intel Macs:**
+1. Download `VidFlow_*_x64.dmg`
+2. Double-click the DMG file
+3. Drag VidFlow to your Applications folder
+4. Open VidFlow from Applications
+
+**Note:** If macOS says "cannot be opened because the developer cannot be verified":
+- Right-click on VidFlow in Applications
+- Click "Open"
+- Click "Open" again in the dialog
+- This only needs to be done once
+
+#### Linux
+
+**Ubuntu/Debian:**
+1. Download `VidFlow_*_amd64.deb`
+2. Open Terminal
+3. Run: `sudo dpkg -i VidFlow_*.deb`
+4. Find VidFlow in your applications menu
+
+**Other Linux Distributions:**
+1. Download `VidFlow_*_amd64.AppImage`
+2. Right-click the file → Properties → Permissions → Allow executing
+3. Double-click to run
+
+### 📦 Direct Download Links
 
 - **Windows:** [⬇️ Download for Windows (.exe)](https://github.com/safi892/alldownloader/releases/download/v0.1.1/VidFlow_0.1.1_x64-setup.exe)
 - **macOS (Apple Mac):**
@@ -52,9 +93,6 @@ Choose the right version for your computer:
     - [⬇️ Download Universal Linux (.AppImage)](https://github.com/safi892/alldownloader/releases/download/v0.1.1/VidFlow_0.1.1_amd64.AppImage)
 
 *Can't find your version? Check all [Release Assets](https://github.com/safi892/alldownloader/releases/tag/v0.1.1).*
-
-1.  Open the downloaded file and follow the simple steps to install it.
-2.  Start downloading!
 
 ---
 
