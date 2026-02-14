@@ -16,8 +16,18 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
-          "name": "yt-dlp",
-          "cmd": "yt-dlp",
+          "name": "bin/yt-dlp",
+          "sidecar": true,
+          "args": true
+        },
+        {
+          "name": "bin/ffmpeg",
+          "sidecar": true,
+          "args": true
+        },
+        {
+          "name": "bin/ffprobe",
+          "sidecar": true,
           "args": true
         },
         {
