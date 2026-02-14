@@ -101,6 +101,10 @@ jobs:
             echo "Downloading ffmpeg for Windows..."
             curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg-$TRIPLE.exe
             curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe-$TRIPLE.exe
+            
+            # For Windows, create a copy of yt-dlp as wrapper (Windows doesn't need a wrapper script)
+            echo Creating Windows wrapper...
+            cp src-tauri/bin/yt-dlp-$TRIPLE.exe src-tauri/bin/yt-dlp-wrapper-$TRIPLE.exe
           fi
           
           chmod +x src-tauri/bin/* || true
@@ -164,13 +168,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Only set signing env vars if certificate exists
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Disable code signing by not passing Apple-specific env vars
+          # This will use ad-hoc signing on macOS
         with:
           tagName: v__VERSION__
           releaseName: "VidFlow v__VERSION__"
