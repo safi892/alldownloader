@@ -124,10 +124,21 @@ jobs:
       - name: Prepare macOS ZIP (for free distribution)
         if: matrix.platform == 'macos-latest'
         run: |
+          # Find the built app bundle
+          APP_PATH=$(find src-tauri/target/release/bundle -name "*.app" -type d 2>/dev/null | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: Could not find .app bundle"
+            ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "No bundle directory"
+            exit 1
+          fi
+          echo "Found app at: $APP_PATH"
+          
           # Extract version from tag (e.g., v1.0.0 -> 1.0.0)
           VERSION=${GITHUB_REF_NAME#v}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          cp -R src-tauri/target/release/bundle/macos/VidFlow.app VidFlow.app
+          
+          # Copy and prepare
+          cp -R "$APP_PATH" VidFlow.app
           xattr -dr com.apple.quarantine VidFlow.app || true
           chmod -R +x VidFlow.app/Contents/MacOS/*
           zip -r VidFlow_${{ matrix.arch }}.zip VidFlow.app
