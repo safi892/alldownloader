@@ -68,7 +68,8 @@ You need **Node.js** and **Rust** installed on your machine. You also need `ffmp
 ### Setup
 1.  Clone the repository.
 2.  Run `npm install` to get the dependencies.
-3.  Run `npm run tauri dev` to start the app in development mode.
+3.  Run `./setup-sidecars.sh` to download the required engines (yt-dlp/ffmpeg).
+4.  Run `npm run tauri dev` to start the app in development mode.
 
 For more technical details, check out [ARCHITECTURE.md](./ARCHITECTURE.md).
 
