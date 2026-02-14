@@ -59,52 +59,49 @@ jobs:
             if [ "${{ matrix.arch }}" == "aarch64" ]; then
               TRIPLE="aarch64-apple-darwin"
               echo "Downloading yt-dlp for Apple Silicon..."
-              curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
+              curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp
               echo "Downloading ffmpeg for Apple Silicon..."
-              curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffprobe-$TRIPLE
+              curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg
+              curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffprobe
             else
               TRIPLE="x86_64-apple-darwin"
               echo "Downloading yt-dlp for Intel Mac..."
-              curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
+              curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp
               echo "Downloading ffmpeg for Intel Mac..."
-              curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffprobe-$TRIPLE
+              curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffmpeg
+              curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffprobe
             fi
             
-            # Create wrapper script for yt-dlp
+            # Create wrapper script for yt-dlp (without suffix)
             echo "Creating yt-dlp wrapper script..."
-            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'exec "$DIR/yt-dlp-'$TRIPLE'" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            chmod +x src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper
+            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper
+            echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper
+            chmod +x src-tauri/bin/yt-dlp-wrapper
             
           elif [ "${{ matrix.platform }}" == "ubuntu-22.04" ]; then
-            TRIPLE="x86_64-unknown-linux-gnu"
             echo "Downloading yt-dlp for Linux..."
-            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp-$TRIPLE
+            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp
             echo "Downloading ffmpeg for Linux..."
-            curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
-            curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffprobe-$TRIPLE
+            curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffmpeg
+            curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffprobe
             
-            # Create wrapper script for yt-dlp
+            # Create wrapper script for yt-dlp (without suffix)
             echo "Creating yt-dlp wrapper script..."
-            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'exec "$DIR/yt-dlp-'$TRIPLE'" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            chmod +x src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper
+            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper
+            echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper
+            chmod +x src-tauri/bin/yt-dlp-wrapper
             
           elif [ "${{ matrix.platform }}" == "windows-latest" ]; then
-            TRIPLE="x86_64-pc-windows-msvc"
             echo "Downloading yt-dlp for Windows..."
-            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o src-tauri/bin/yt-dlp-$TRIPLE.exe
+            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o src-tauri/bin/yt-dlp.exe
             echo "Downloading ffmpeg for Windows..."
-            curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg-$TRIPLE.exe
-            curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe-$TRIPLE.exe
+            curl -L https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg.exe
+            curl -L https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe.exe
             
-            # For Windows, create a copy of yt-dlp as wrapper (Windows doesn't need a wrapper script)
-            echo Creating Windows wrapper...
-            cp src-tauri/bin/yt-dlp-$TRIPLE.exe src-tauri/bin/yt-dlp-wrapper-$TRIPLE.exe
+            # For Windows, create a copy as wrapper (without suffix)
+            cp src-tauri/bin/yt-dlp.exe src-tauri/bin/yt-dlp-wrapper.exe
           fi
           
           chmod +x src-tauri/bin/* || true
@@ -115,26 +112,16 @@ jobs:
         if: matrix.platform != 'windows-latest'
         shell: bash
         run: |
-          if [ "${{ matrix.platform }}" == "macos-latest" ]; then
-            if [ "${{ matrix.arch }}" == "aarch64" ]; then
-              TRIPLE="aarch64-apple-darwin"
-            else
-              TRIPLE="x86_64-apple-darwin"
-            fi
-          else
-            TRIPLE="x86_64-unknown-linux-gnu"
-          fi
+          echo "Verifying binaries..."
           
-          echo "Verifying binaries for $TRIPLE..."
-          
-          if ./src-tauri/bin/yt-dlp-wrapper-$TRIPLE --version; then
+          if ./src-tauri/bin/yt-dlp-wrapper --version; then
             echo "✅ yt-dlp wrapper works"
           else
             echo "❌ yt-dlp wrapper failed"
             exit 1
           fi
           
-          if ./src-tauri/bin/ffmpeg-$TRIPLE -version | head -1; then
+          if ./src-tauri/bin/ffmpeg -version | head -1; then
             echo "✅ ffmpeg works"
           else
             echo "❌ ffmpeg failed"
@@ -145,11 +132,10 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: powershell
         run: |
-          $TRIPLE = "x86_64-pc-windows-msvc"
-          Write-Host "Verifying binaries for $TRIPLE..."
+          Write-Host "Verifying binaries..."
           
           try {
-            $version = & .\src-tauri\bin\yt-dlp-$TRIPLE.exe --version 2>&1
+            $version = & .\src-tauri\bin\yt-dlp.exe --version 2>&1
             Write-Host "✅ yt-dlp version: $version"
           } catch {
             Write-Host "❌ yt-dlp failed: $_"
@@ -157,7 +143,7 @@ jobs:
           }
           
           try {
-            $version = & .\src-tauri\bin\ffmpeg-$TRIPLE.exe -version 2>&1 | Select-Object -First 1
+            $version = & .\src-tauri\bin\ffmpeg.exe -version 2>&1 | Select-Object -First 1
             Write-Host "✅ ffmpeg: $version"
           } catch {
             Write-Host "❌ ffmpeg failed: $_"
@@ -168,8 +154,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Disable code signing by not passing Apple-specific env vars
-          # This will use ad-hoc signing on macOS
         with:
           tagName: v__VERSION__
           releaseName: "VidFlow v__VERSION__"

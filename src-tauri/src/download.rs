@@ -198,6 +198,14 @@ impl DownloadManager {
         let max_items = SYSTEM_GUARDRAILS.max_playlist_items.to_string();
         
         log::info!("[METADATA] Creating sidecar command...");
+        
+        // Debug: print the path to the sidecar
+        let sidecar_path = app.path().resource_dir()
+            .map(|p| p.join("yt-dlp-wrapper"))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+        log::info!("[METADATA] Resource dir: {}", sidecar_path);
+        
         let output = app.shell().sidecar("yt-dlp-wrapper")
             .map_err(|e| {
                 log::error!("[METADATA] Failed to create sidecar: {}", e);
@@ -212,9 +220,14 @@ impl DownloadManager {
             })?;
         
         log::info!("[METADATA] Command completed with status: {}", output.status.success());
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        
+        log::info!("[METADATA] stdout: {}", stdout);
+        log::info!("[METADATA] stderr: {}", stderr);
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("yt-dlp failed: {}", stderr));
         }
 
