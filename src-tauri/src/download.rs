@@ -156,7 +156,8 @@ pub async fn verify_media_integrity<R: Runtime>(app: &AppHandle<R>, path: &std::
     }
 
     // 2. Rigorous check: ffprobe container validity
-    let output = app.shell().sidecar("bin/ffprobe")?
+    let output = app.shell().sidecar("bin/ffprobe")
+        .map_err(|e| e.to_string())?
         .args(["-v", "error", "-show_format", "-show_streams", &path.to_string_lossy()])
         .output()
         .await
@@ -194,7 +195,8 @@ impl DownloadManager {
 
     pub async fn get_video_metadata<R: Runtime>(&self, app: AppHandle<R>, url: String) -> Result<VideoMetadata, String> {
         let max_items = SYSTEM_GUARDRAILS.max_playlist_items.to_string();
-        let output = app.shell().sidecar("bin/yt-dlp")?
+        let output = app.shell().sidecar("bin/yt-dlp")
+            .map_err(|e| e.to_string())?
             .args(["-J", "--flat-playlist", "--no-warnings", "--playlist-end", &max_items, &url])
             .output()
             .await
