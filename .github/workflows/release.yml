@@ -92,6 +92,7 @@ jobs:
           ls -la src-tauri/bin/
 
       - name: Build Tauri App
+        if: matrix.platform != 'macos-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -121,14 +122,18 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      - name: Build Tauri App (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: npm run tauri build -- ${{ matrix.args }}
+
       - name: Prepare macOS ZIP (for free distribution)
         if: matrix.platform == 'macos-latest'
         run: |
           # Find the built app bundle
-          APP_PATH=$(find src-tauri/target/release/bundle -name "*.app" -type d 2>/dev/null | head -1)
+          APP_PATH=$(find src-tauri/target -name "*.app" -type d 2>/dev/null | head -1)
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: Could not find .app bundle"
-            ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "No bundle directory"
+            ls -la src-tauri/target/ 2>/dev/null || echo "No target directory"
             exit 1
           fi
           echo "Found app at: $APP_PATH"
@@ -142,7 +147,7 @@ jobs:
           xattr -dr com.apple.quarantine VidFlow.app || true
           chmod -R +x VidFlow.app/Contents/MacOS/*
           zip -r VidFlow_${{ matrix.arch }}.zip VidFlow.app
-
+          
       - name: Upload macOS ZIP to Release
         if: matrix.platform == 'macos-latest'
         uses: softprops/action-gh-release@v1
