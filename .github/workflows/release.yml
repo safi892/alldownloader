@@ -60,7 +60,7 @@ jobs:
           TRIPLE="${{ matrix.suffix }}"
           
           if [ "${{ matrix.platform }}" == "macos-latest" ]; then
-            # yt-dlp
+            # yt-dlp (standalone binary)
             curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
             # ffmpeg / ffprobe
             if [ "${{ matrix.arch }}" == "aarch64" ]; then
@@ -91,8 +91,7 @@ jobs:
           chmod +x src-tauri/bin/* || true
           ls -la src-tauri/bin/
 
-      - name: Build Tauri App
-        if: matrix.platform != 'macos-latest'
+      - name: Build with Tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -118,41 +117,34 @@ jobs:
             
             ### Linux
             - `VidFlow_x86_64.deb` or `.AppImage`
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Build Tauri App (macOS)
-        if: matrix.platform == 'macos-latest'
-        run: npm run tauri build -- ${{ matrix.args }}
-
-      - name: Prepare macOS ZIP (for free distribution)
+      - name: Create macOS ZIP (for free distribution)
         if: matrix.platform == 'macos-latest'
         run: |
-          # Find the built app bundle
-          APP_PATH=$(find src-tauri/target -name "*.app" -type d 2>/dev/null | head -1)
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: Could not find .app bundle"
-            ls -la src-tauri/target/ 2>/dev/null || echo "No target directory"
-            exit 1
-          fi
-          echo "Found app at: $APP_PATH"
-          
-          # Extract version from tag (e.g., v1.0.0 -> 1.0.0)
+          # Extract version from tag
           VERSION=${GITHUB_REF_NAME#v}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           
-          # Copy and prepare
+          # Find the built app bundle
+          APP_PATH=$(find src-tauri/target -name "*.app" -type d 2>/dev/null | head -1)
+          echo "Found app at: $APP_PATH"
+          
+          # Copy and prepare ZIP
           cp -R "$APP_PATH" VidFlow.app
           xattr -dr com.apple.quarantine VidFlow.app || true
           chmod -R +x VidFlow.app/Contents/MacOS/*
           zip -r VidFlow_${{ matrix.arch }}.zip VidFlow.app
-          
-      - name: Upload macOS ZIP to Release
+          ls -la *.zip
+
+      - name: Upload macOS ZIP
         if: matrix.platform == 'macos-latest'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
           files: VidFlow_${{ matrix.arch }}.zip
+          append_release_note: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
