@@ -9,6 +9,8 @@ jobs:
   release:
     permissions:
       contents: write
+      attestations: write
+      discussions: write
     strategy:
       fail-fast: false
       matrix:
@@ -92,12 +94,13 @@ jobs:
           ls -la src-tauri/bin/
 
       - name: Build with Tauri
+        if: matrix.arch == 'aarch64' && matrix.platform == 'macos-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__
-          releaseName: "VidFlow v__VERSION__"
+          tagName: ${{ github.ref_name }}
+          releaseName: "VidFlow ${{ github.ref_name }}"
           releaseBody: |
             ## Download VidFlow
             
@@ -120,13 +123,17 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+          uploadAssets: true
+
+      - name: Build Tauri (other platforms)
+        if: matrix.platform != 'macos-latest' || matrix.arch != 'aarch64'
+        run: npm run tauri build -- ${{ matrix.args }}
 
       - name: Create macOS ZIP (for free distribution)
         if: matrix.platform == 'macos-latest'
         run: |
           # Extract version from tag
-          VERSION=${GITHUB_REF_NAME#v}
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
           
           # Find the built app bundle
           APP_PATH=$(find src-tauri/target -name "*.app" -type d 2>/dev/null | head -1)
@@ -143,8 +150,28 @@ jobs:
         if: matrix.platform == 'macos-latest'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
+          tag_name: ${{ github.ref_name }}
           files: VidFlow_${{ matrix.arch }}.zip
+          append_release_note: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux DEB
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: src-tauri/target/release/bundle/deb/*.deb
+          append_release_note: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows EXE
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: src-tauri/target/release/bundle/msi/*.exe
           append_release_note: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
