@@ -52,22 +52,18 @@ You can download the latest version of VidFlow from our **Releases** page:
 #### macOS (Apple Mac)
 
 **For Apple Silicon Macs (M1, M2, M3, M4):**
-1. Download `VidFlow_*_aarch64.dmg`
-2. Double-click the DMG file
-3. Drag VidFlow to your Applications folder
-4. Open VidFlow from Applications
+1. Download `VidFlow_v*_aarch64.zip`
+2. Extract the ZIP file
+3. Right-click on VidFlow.app → Open → Click "Open" (bypasses Gatekeeper)
+4. That's it! No need to drag to Applications
 
 **For Intel Macs:**
-1. Download `VidFlow_*_x64.dmg`
-2. Double-click the DMG file
-3. Drag VidFlow to your Applications folder
-4. Open VidFlow from Applications
+1. Download `VidFlow_v*_x86_64.zip`
+2. Extract the ZIP file
+3. Right-click on VidFlow.app → Open → Click "Open" (bypasses Gatekeeper)
+4. That's it! No need to drag to Applications
 
-**Note:** If macOS says "cannot be opened because the developer cannot be verified":
-- Right-click on VidFlow in Applications
-- Click "Open"
-- Click "Open" again in the dialog
-- This only needs to be done once
+**Note:** The ZIP format allows you to bypass macOS Gatekeeper restrictions. Just right-click → Open on the first run.
 
 #### Linux
 
@@ -84,15 +80,15 @@ You can download the latest version of VidFlow from our **Releases** page:
 
 ### 📦 Direct Download Links
 
-- **Windows:** [⬇️ Download for Windows (.exe)](https://github.com/safi892/alldownloader/releases/download/v0.1.1/VidFlow_0.1.1_x64-setup.exe)
+- **Windows:** [⬇️ Download for Windows (.exe)](https://github.com/safi892/alldownloader/releases/download/v0.1.3/VidFlow_0.1.3_x64-setup.exe)
 - **macOS (Apple Mac):**
-    - [⬇️ Download for M1/M2/M3 Mac](https://github.com/safi892/alldownloader/releases/download/v0.1.1/VidFlow_0.1.1_aarch64.dmg)
-    - [⬇️ Download for Intel Mac](https://github.com/safi892/alldownloader/releases/download/v0.1.1/VidFlow_0.1.1_x64.dmg)
+    - [⬇️ Download for M1/M2/M3/M4 Mac (ZIP)](https://github.com/safi892/alldownloader/releases/download/v0.1.3/VidFlow_aarch64.zip)
+    - [⬇️ Download for Intel Mac (ZIP)](https://github.com/safi892/alldownloader/releases/download/v0.1.3/VidFlow_x86_64.zip)
 - **Linux:**
-    - [⬇️ Download for Ubuntu/Debian (.deb)](https://github.com/safi892/alldownloader/releases/download/v0.1.1/VidFlow_0.1.1_amd64.deb)
-    - [⬇️ Download Universal Linux (.AppImage)](https://github.com/safi892/alldownloader/releases/download/v0.1.1/VidFlow_0.1.1_amd64.AppImage)
+    - [⬇️ Download for Ubuntu/Debian (.deb)](https://github.com/safi892/alldownloader/releases/download/v0.1.3/VidFlow_0.1.3_amd64.deb)
+    - [⬇️ Download Universal Linux (.AppImage)](https://github.com/safi892/alldownloader/releases/download/v0.1.3/VidFlow_0.1.3_amd64.AppImage)
 
-*Can't find your version? Check all [Release Assets](https://github.com/safi892/alldownloader/releases/tag/v0.1.1).*
+*Can't find your version? Check all [Release Assets](https://github.com/safi892/alldownloader/releases/tag/v0.1.3).*
 
 ---
 
