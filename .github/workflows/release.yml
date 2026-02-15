@@ -93,8 +93,9 @@ jobs:
           chmod +x src-tauri/bin/* || true
           ls -la src-tauri/bin/
 
-      - name: Build with Tauri
-        if: matrix.arch == 'aarch64' && matrix.platform == 'macos-latest'
+      - name: Build with Tauri and create release
+        # Only create release on first job (ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,10 +124,9 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          uploadAssets: true
 
-      - name: Build Tauri (other platforms)
-        if: matrix.platform != 'macos-latest' || matrix.arch != 'aarch64'
+      - name: Build Tauri only (other platforms)
+        if: matrix.platform != 'ubuntu-22.04'
         run: npm run tauri build -- ${{ matrix.args }}
 
       - name: Create macOS ZIP (for free distribution)
@@ -152,7 +152,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: VidFlow_${{ matrix.arch }}.zip
-          append_release_note: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -162,7 +161,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: src-tauri/target/release/bundle/deb/*.deb
-          append_release_note: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -171,7 +169,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: src-tauri/target/release/bundle/msi/*.exe
-          append_release_note: false
+          files: src-tauri/target/release/bundle/nsis/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
