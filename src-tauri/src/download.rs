@@ -11,6 +11,9 @@ pub type Child = ();
 #[cfg(not(mobile))]
 pub use tauri_plugin_shell::process::CommandChild as Child;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -217,9 +220,13 @@ impl DownloadManager {
             log::warn!("[METADATA] yt-dlp NOT FOUND at path, will search in PATH");
         }
         
-        let output = tokio::process::Command::new(&yt_dlp_path)
-            .args(["-J", "--flat-playlist", "--no-warnings", "--playlist-end", &max_items, &url])
-            .output()
+        let mut cmd = tokio::process::Command::new(&yt_dlp_path);
+        cmd.args(["-J", "--flat-playlist", "--no-warnings", "--playlist-end", &max_items, &url]);
+
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+        let output = cmd.output()
             .await
             .map_err(|e| {
                 log::error!("[METADATA] Failed to execute yt-dlp: {}", e);
@@ -573,7 +580,7 @@ impl DownloadManager {
                         args.push("-f");
                         args.push(&format_arg);
                         args.push("--merge-output-format");
-                        args.push("mp4/mkv");
+                        args.push("mp4");
                         // Tell yt-dlp where to find ffmpeg for merging
                         log::info!("[DOWNLOAD] Using ffmpeg at: {}", ffmpeg_path);
                         args.push("--ffmpeg-location");
