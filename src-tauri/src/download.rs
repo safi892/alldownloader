@@ -507,6 +507,9 @@ impl DownloadManager {
                 let task = task_ref.lock().unwrap();
                 task.url.clone()
             };
+            let path_inner = path.clone();
+            let format_spec_inner = format_spec.clone();
+            let cookies_inner = cookies.clone();
 
             tauri::async_runtime::spawn(async move {
                 let fragments = SYSTEM_GUARDRAILS.default_fragments.to_string();
@@ -544,6 +547,57 @@ impl DownloadManager {
                 
                 log::info!("[DOWNLOAD] Using yt-dlp at: {}", yt_dlp_path);
                 log::info!("[DOWNLOAD] Using ffmpeg at: {}", ffmpeg_path);
+                
+                // Build args
+                let mut args = vec![
+                    "--newline",
+                    "-N", &fragments,
+                    "--progress-template",
+                    "%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s",
+                    "--no-warnings",
+                ];
+
+                // Cookie Handling
+                let mut cookie_file_path = None;
+                if let Some(ref cookie_data) = cookies_inner {
+                    let temp_dir = std::env::temp_dir();
+                    let file_path = temp_dir.join(format!("vidflow_cookies_{}.txt", id));
+                    if let Ok(mut file) = fs::File::create(&file_path) {
+                        if file.write_all(cookie_data.as_bytes()).is_ok() {
+                            cookie_file_path = Some(file_path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+
+                let cookie_arg;
+                if let Some(ref path) = cookie_file_path {
+                    cookie_arg = path.clone();
+                    args.push("--cookies");
+                    args.push(&cookie_arg);
+                }
+
+                args.push("--add-metadata");
+                args.push("--embed-thumbnail");
+
+                let path_string;
+                if let Some(p) = &path_inner {
+                    path_string = p.clone();
+                    args.push("-P");
+                    args.push(&path_string);
+                }
+
+                let format_arg;
+                if let Some(ref spec) = format_spec_inner {
+                    if spec == "audio" {
+                        args.push("-x");
+                        args.push("--audio-format");
+                        args.push("mp3");
+                    } else {
+                        format_arg = format!("{}+bestaudio/best", spec);
+                        args.push("-f");
+                        args.push(&format_arg);
+                        args.push("--merge-output-format");
+                        args.push("mp4");
                         args.push("--ffmpeg-location");
                         args.push(&ffmpeg_path);
                     }
