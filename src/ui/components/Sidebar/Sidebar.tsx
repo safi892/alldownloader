@@ -117,8 +117,10 @@ export const Sidebar = () => {
                     <div className="mt-4 flex items-center gap-3 px-3">
                         <div className="size-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 ring-2 ring-black/5 dark:ring-white/10" />
                         <div className="flex flex-col">
-                            <p className="text-slate-900 dark:text-white text-xs font-semibold">Alex Designer</p>
-                            <p className="text-slate-500 dark:text-[#a19db9] text-[10px]">Premium Plan</p>
+                            <p className="text-slate-900 dark:text-white text-xs font-semibold">Saffi Ullah</p>
+                            <a href="https://github.com/safi892/alldownloader" target="_blank" rel="noreferrer" className="text-slate-500 dark:text-[#a19db9] text-[10px] hover:text-primary dark:hover:text-primary transition-colors">
+                                GitHub Repo
+                            </a>
                         </div>
                     </div>
                 )}
