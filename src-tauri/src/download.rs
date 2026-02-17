@@ -511,92 +511,45 @@ impl DownloadManager {
             tauri::async_runtime::spawn(async move {
                 let fragments = SYSTEM_GUARDRAILS.default_fragments.to_string();
                 
-                // Get ffmpeg path from Tauri's resource directory (works in both dev and production)
-                let ffmpeg_path = app_inner.path().resource_dir()
+                // Get ffmpeg and yt-dlp paths from executable directory (works in both dev and production)
+                #[cfg(target_os = "windows")]
+                let ffmpeg_path = {
+                    let base = std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                        .unwrap_or_default();
+                    base.join("ffmpeg.exe").to_string_lossy().to_string()
+                };
+                
+                #[cfg(not(target_os = "windows"))]
+                let ffmpeg_path = std::env::current_exe()
                     .ok()
-                    .and_then(|p| {
-                        // In production, sidecars are in the resource dir
-                        // Tauri automatically strips platform suffixes
-                        let ffmpeg_binary = p.join("ffmpeg");
-                        if ffmpeg_binary.exists() {
-                            Some(ffmpeg_binary.to_string_lossy().to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| {
-                        // Fallback: try to find ffmpeg in the same directory as the executable
-                        std::env::current_exe()
-                            .ok()
-                            .and_then(|p| p.parent().map(|p| p.join("ffmpeg").to_string_lossy().to_string()))
-                            .unwrap_or_else(|| "ffmpeg".to_string())
-                    });
+                    .and_then(|p| p.parent().map(|p| p.join("ffmpeg").to_string_lossy().to_string()))
+                    .unwrap_or_else(|| "ffmpeg".to_string());
                 
-                let mut args = vec![
-                    "--newline",
-                    "-N", &fragments,
-                    "--progress-template",
-                    "%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s",
-                    "--no-warnings",
-                ];
-
-                // Cookie Handling
-                let mut cookie_file_path = None;
-                if let Some(ref cookie_data) = cookies {
-                    let temp_dir = std::env::temp_dir();
-                    let file_path = temp_dir.join(format!("vidflow_cookies_{}.txt", id));
-                    if let Ok(mut file) = fs::File::create(&file_path) {
-                        if file.write_all(cookie_data.as_bytes()).is_ok() {
-                            cookie_file_path = Some(file_path.to_string_lossy().to_string());
-                        }
-                    }
-                }
-
-                let cookie_arg;
-                if let Some(ref path) = cookie_file_path {
-                    cookie_arg = path.clone();
-                    args.push("--cookies");
-                    args.push(&cookie_arg);
-                }
-
-                args.push("--add-metadata");
-                args.push("--embed-thumbnail");
-
-                let path_string;
-                if let Some(p) = &path {
-                    path_string = p.clone();
-                    args.push("-P");
-                    args.push(&path_string);
-                }
-
-                let format_arg;
-                if let Some(ref spec) = format_spec {
-                    if spec == "audio" {
-                        args.push("-x");
-                        args.push("--audio-format");
-                        args.push("mp3");
-                    } else {
-                        format_arg = format!("{}+bestaudio/best", spec);
-                        args.push("-f");
-                        args.push(&format_arg);
-                        args.push("--merge-output-format");
-                        args.push("mp4");
-                        // Tell yt-dlp where to find ffmpeg for merging
-                        log::info!("[DOWNLOAD] Using ffmpeg at: {}", ffmpeg_path);
-                        args.push("--ffmpeg-location");
-                        args.push(&ffmpeg_path);
-                    }
-                }
+                #[cfg(target_os = "windows")]
+                let yt_dlp_path = {
+                    let base = std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                        .unwrap_or_default();
+                    base.join("yt-dlp.exe").to_string_lossy().to_string()
+                };
                 
-                args.push(&url_inner);
-
-                // Get yt-dlp path from executable directory (works in both dev and production)
+                #[cfg(not(target_os = "windows"))]
                 let yt_dlp_path = std::env::current_exe()
                     .ok()
                     .and_then(|p| p.parent().map(|p| p.join("yt-dlp").to_string_lossy().to_string()))
                     .unwrap_or_else(|| "yt-dlp".to_string());
                 
                 log::info!("[DOWNLOAD] Using yt-dlp at: {}", yt_dlp_path);
+                log::info!("[DOWNLOAD] Using ffmpeg at: {}", ffmpeg_path);
+                        args.push("--ffmpeg-location");
+                        args.push(&ffmpeg_path);
+                    }
+                }
+                
+                args.push(&url_inner);
 
                 match app_inner.shell()
                     .command(yt_dlp_path)
