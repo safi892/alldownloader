@@ -79,6 +79,7 @@ jobs:
 
   # Separate jobs for each platform - just build and upload using gh CLI
   build-macos-aarch64:
+    needs: build-all
     permissions:
       contents: write
     runs-on: macos-latest
@@ -118,6 +119,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-x86:
+    needs: build-all
     permissions:
       contents: write
     runs-on: macos-latest
@@ -157,6 +159,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
+    needs: build-all
     permissions:
       contents: write
     runs-on: windows-latest
