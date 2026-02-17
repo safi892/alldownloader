@@ -78,17 +78,21 @@ You can download the latest version of VidFlow from our **Releases** page:
 2. Right-click the file → Properties → Permissions → Allow executing
 3. Double-click to run
 
-### 📦 Direct Download Links
+### 📦 Direct Download Links (Auto-Updated to Latest)
 
-- **Windows:** [⬇️ Download for Windows (.exe)](https://github.com/safi892/alldownloader/releases/download/v0.1.5/VidFlow_0.1.5_x64-setup.exe)
+These links automatically point to the **latest release** - no version numbers needed!
+
+- **Windows:** [⬇️ Download for Windows (.exe)](https://github.com/safi892/alldownloader/releases/latest/download/VidFlow_x64-setup.exe)
 - **macOS (Apple Mac):**
-    - [⬇️ Download for M1/M2/M3/M4 Mac (ZIP)](https://github.com/safi892/alldownloader/releases/download/v0.1.5/VidFlow_aarch64.zip)
-    - [⬇️ Download for Intel Mac (ZIP)](https://github.com/safi892/alldownloader/releases/download/v0.1.5/VidFlow_x86_64.zip)
+    - [⬇️ Download for M1/M2/M3/M4 Mac (ZIP)](https://github.com/safi892/alldownloader/releases/latest/download/VidFlow_aarch64.zip)
+    - [⬇️ Download for Intel Mac (ZIP)](https://github.com/safi892/alldownloader/releases/latest/download/VidFlow_x86_64.zip)
 - **Linux:**
-    - [⬇️ Download for Ubuntu/Debian (.deb)](https://github.com/safi892/alldownloader/releases/download/v0.1.5/VidFlow_0.1.5_amd64.deb)
-    - [⬇️ Download Universal Linux (.AppImage)](https://github.com/safi892/alldownloader/releases/download/v0.1.5/VidFlow_0.1.5_amd64.AppImage)
+    - [⬇️ Download for Ubuntu/Debian (.deb)](https://github.com/safi892/alldownloader/releases/latest/download/VidFlow_amd64.deb)
+    - [⬇️ Download Universal Linux (.AppImage)](https://github.com/safi892/alldownloader/releases/latest/download/VidFlow_amd64.AppImage)
 
-*Can't find your version? Check all [Release Assets](https://github.com/safi892/alldownloader/releases/tag/v0.1.5).*
+*Note: These links use GitHub's `/latest` endpoint and will always download the newest version. For specific versions, visit the [releases page](https://github.com/safi892/alldownloader/releases).*
+
+*Can't find your version? Check all [Release Assets](https://github.com/safi892/alldownloader/releases/latest).
 
 ---
 

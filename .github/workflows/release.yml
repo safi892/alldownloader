@@ -45,6 +45,22 @@ jobs:
       - name: Build Linux
         run: npm run tauri build
 
+      - name: Rename files for latest links
+        run: |
+          # Rename files to remove version numbers for /latest endpoint
+          cd src-tauri/target/release/bundle
+          for file in deb/*.deb; do
+            if [ -f "$file" ]; then
+              cp "$file" "deb/VidFlow_amd64.deb"
+            fi
+          done
+          for file in appimage/*.AppImage; do
+            if [ -f "$file" ]; then
+              cp "$file" "appimage/VidFlow_amd64.AppImage"
+            fi
+          done
+          ls -la deb/ appimage/
+
       - name: Create Linux release
         uses: softprops/action-gh-release@v2
         with:
@@ -65,10 +81,10 @@ jobs:
             3. Right-click → Open → Click Open (bypasses Gatekeeper)
             
             ### Windows
-            - `VidFlow_x86_64-setup.exe`
+            - `VidFlow_x64-setup.exe`
             
             ### Linux
-            - `VidFlow_x86_64.deb` or `.AppImage`
+            - `VidFlow_amd64.deb` or `.AppImage`
           draft: false
           prerelease: false
           files: |
@@ -180,8 +196,18 @@ jobs:
           copy src-tauri/bin\yt-dlp-$TRIPLE.exe src-tauri/bin\yt-dlp-wrapper-$TRIPLE.exe
       - name: Build
         run: npm run tauri build
+
+      - name: Rename file for latest links
+        run: |
+          cd src-tauri/target/release/bundle/nsis
+          $exe = Get-ChildItem *.exe | Select-Object -First 1
+          if ($exe) {
+            Copy-Item $exe.Name "VidFlow_x64-setup.exe"
+          }
+          Get-ChildItem
+
       - name: Upload to Release
         run: |
-          Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | ForEach-Object { gh release upload ${{ github.ref_name }} $_.FullName --clobber }
+          gh release upload ${{ github.ref_name }} src-tauri/target/release/bundle/nsis/VidFlow_x64-setup.exe --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
