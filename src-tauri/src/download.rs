@@ -148,7 +148,7 @@ impl DownloadTask {
     }
 }
 
-pub async fn verify_media_integrity<R: Runtime>(app: &AppHandle<R>, path: &std::path::Path) -> Result<(), String> {
+pub async fn verify_media_integrity<R: Runtime>(_app: &AppHandle<R>, path: &std::path::Path) -> Result<(), String> {
     // 1. Basic check: Existence and non-zero size
     if !path.exists() {
         return Err("Output file does not exist".to_string());
@@ -159,8 +159,23 @@ pub async fn verify_media_integrity<R: Runtime>(app: &AppHandle<R>, path: &std::
     }
 
     // 2. Rigorous check: ffprobe container validity
-    let output = app.shell().sidecar("ffprobe")
-        .map_err(|e| e.to_string())?
+    // Get ffprobe path from executable directory (works in both dev and production)
+    #[cfg(target_os = "windows")]
+    let ffprobe_path = {
+        let base = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_default();
+        base.join("ffprobe.exe").to_string_lossy().to_string()
+    };
+    
+    #[cfg(not(target_os = "windows"))]
+    let ffprobe_path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("ffprobe").to_string_lossy().to_string()))
+        .unwrap_or_else(|| "ffprobe".to_string());
+
+    let output = tokio::process::Command::new(&ffprobe_path)
         .args(["-v", "error", "-show_format", "-show_streams", &path.to_string_lossy()])
         .output()
         .await
