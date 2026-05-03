@@ -23,7 +23,13 @@ export const DownloadDashboard = () => {
     const [isConfirmingClear, setIsConfirmingClear] = useState(false);
 
     useEffect(() => {
-        initializeListeners();
+        let cleanup: (() => void) | undefined;
+        initializeListeners().then((unlisten) => {
+            cleanup = unlisten;
+        });
+        return () => {
+            if (cleanup) cleanup();
+        };
     }, [initializeListeners]);
 
     const activeCount = tasks.filter(t => t.status === 'downloading' || t.status === 'queued').length;

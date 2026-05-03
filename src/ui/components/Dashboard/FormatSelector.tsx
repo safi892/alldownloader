@@ -17,6 +17,7 @@ export const FormatSelector = ({ metadata, onConfirm, onCancel }: FormatSelector
     const siteInfo = getSiteInfo(metadata.webpage_url);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [audioQuality, setAudioQuality] = useState<'best' | '128' | '320'>('best');
+    const [playlistQuality, setPlaylistQuality] = useState<'best' | '1080' | '720' | '480' | '360' | 'audio'>('best');
     const [meta, setMeta] = useState({ artist: "", album: "" });
 
     // Grouping Logic for Video
@@ -33,6 +34,23 @@ export const FormatSelector = ({ metadata, onConfirm, onCancel }: FormatSelector
         return Array.from(uniqueResolutions.entries()).sort((a, b) => (b[1].height || 0) - (a[1].height || 0));
     }, [metadata]);
 
+    const playlistQualityOptions = [
+        { id: 'best', label: 'Best' },
+        { id: '1080', label: '1080p' },
+        { id: '720', label: '720p' },
+        { id: '480', label: '480p' },
+        { id: '360', label: '360p' },
+        { id: 'audio', label: 'Audio (MP3)' },
+    ] as const;
+
+    const playlistQualityLabel = playlistQualityOptions.find(o => o.id === playlistQuality)?.label ?? 'Best';
+
+    const getPlaylistFormatSpec = () => {
+        if (playlistQuality === 'audio') return 'audio';
+        if (playlistQuality === 'best') return 'bestvideo';
+        return `bestvideo[height<=${playlistQuality}]`;
+    };
+
     const handleConfirm = () => {
         if (tab === 'video' && selectedId) onConfirm(selectedId);
         else if (tab === 'audio') {
@@ -40,7 +58,7 @@ export const FormatSelector = ({ metadata, onConfirm, onCancel }: FormatSelector
             // For now, let's just pass "audio" and we might need an advanced command later
             onConfirm("audio");
         }
-        else if (tab === 'playlist') onConfirm("best"); // For playlist, download all best
+        else if (tab === 'playlist') onConfirm(getPlaylistFormatSpec());
     };
 
     return (
@@ -164,6 +182,28 @@ export const FormatSelector = ({ metadata, onConfirm, onCancel }: FormatSelector
 
                     {tab === 'playlist' && (
                         <div className="flex flex-col gap-2">
+                            <div className="space-y-2">
+                                <label className="text-[10px] text-primary dark:text-primary uppercase font-black px-1">Quality</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {playlistQualityOptions.map(q => (
+                                        <button
+                                            key={q.id}
+                                            onClick={() => setPlaylistQuality(q.id)}
+                                            className={cn(
+                                                "py-2 rounded-lg border text-xs font-bold transition-all",
+                                                playlistQuality === q.id
+                                                    ? "bg-primary/5 dark:bg-primary/20 border-primary text-primary dark:text-white"
+                                                    : "bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-glass-border text-slate-500 dark:text-gray-400"
+                                            )}
+                                        >
+                                            {q.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-slate-500 dark:text-gray-400 px-1">
+                                    All videos will download at {playlistQualityLabel}.
+                                </p>
+                            </div>
                             <p className="text-[10px] text-slate-500 dark:text-gray-400 uppercase font-black px-1">Videos in this playlist</p>
                             <div className="flex flex-col gap-1 border border-gray-100 dark:border-glass-border rounded-xl bg-gray-50 dark:bg-white/5 overflow-hidden">
                                 {metadata.entries?.slice(0, 50).map((entry, i) => (
@@ -185,7 +225,7 @@ export const FormatSelector = ({ metadata, onConfirm, onCancel }: FormatSelector
                 {/* Footer */}
                 <div className="p-4 border-t border-gray-100 dark:border-glass-border bg-gray-50 dark:bg-white/5 flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 dark:text-gray-500 italic max-w-[150px] truncate font-medium">
-                        {tab === 'playlist' ? 'Whole playlist will be downloaded.' : ''}
+                        {tab === 'playlist' ? `Playlist will download at ${playlistQualityLabel}.` : ''}
                     </span>
                     <div className="flex gap-2">
                         <Button variant="ghost" onClick={onCancel} className="text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white font-bold h-10 px-6">Cancel</Button>

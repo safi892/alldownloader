@@ -1,0 +1,64 @@
+name: "Setup Rust Toolchain"
+description: "Install Rust with caching for Tauri builds"
+inputs:
+  rust-version:
+    description: "Rust version (default: stable)"
+    required: false
+    default: "stable"
+  targets:
+    description: "Comma-separated target triples"
+    required: false
+    default: ""
+  components:
+    description: "Rust components (rustfmt, clippy, etc.)"
+    required: false
+    default: ""
+
+outputs:
+  rust-version:
+    description: "The installed Rust version"
+    value: ${{ steps.version.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get Rust version
+      id: version
+      shell: bash
+      run: |
+        echo "version=${{ inputs.rust-version }}" >> $GITHUB_OUTPUT
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        version: ${{ inputs.rust-version }}
+        targets: ${{ inputs.targets }}
+        components: ${{ inputs.components }}
+
+    - name: Configure Rust build
+      shell: bash
+      run: |
+        # Optimize for Tauri builds
+        echo '[profile.release]\npanic = "abort"\ncodegen-units = 1\nlto = true\nopt-level = "s"\nstrip = true' >> ~/.cargo/config.toml || true
+
+    - name: Cache Cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry/index
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache Cargo git
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/git/db
+        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache Cargo build
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          target/
+        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-target-

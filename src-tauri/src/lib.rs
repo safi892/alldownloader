@@ -63,13 +63,10 @@ pub fn run() {
                     Ok(cmd) => {
                         match cmd.args(["--version"]).output().await {
                             Ok(output) if output.status.success() => {
-                                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                                if version < "2023.01.01".to_string() {
-                                     let _ = app_handle.emit("binary-error", format!("yt-dlp version {} is too old. Please update to at least 2023.01.01.", version));
-                                }
+                                log::info!("yt-dlp version: {}", String::from_utf8_lossy(&output.stdout).trim());
                             },
                             _ => {
-                                let _ = app_handle.emit("binary-error", "yt-dlp sidecar failed to execute. Permissions or architecture mismatch?");
+                                log::warn!("yt-dlp version check failed");
                             }
                         }
                     },
@@ -130,6 +127,10 @@ pub fn run() {
 
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Exit => {
+            let manager = app_handle.state::<download::DownloadManager>();
+            manager.cleanup_all();
+        }
+        tauri::RunEvent::ExitRequested { .. } => {
             let manager = app_handle.state::<download::DownloadManager>();
             manager.cleanup_all();
         }

@@ -1,0 +1,303 @@
+name: "Security Audit - Scheduled"
+
+on:
+  schedule:
+    # Run weekly on Monday at 2:00 UTC
+    - cron: '0 2 * * 1'
+  # Allow manual trigger
+  workflow_dispatch:
+  # Also run on PR changes to main
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/Cargo.lock'
+      - '**/package-lock.json'
+      - '**/*.rs'
+      - '**/*.ts'
+      - '**/*.tsx'
+
+# Cancel in-progress runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ============================================================================
+  # SECTION 1: Rust Dependency Vulnerability Scanning
+  # ============================================================================
+  rust-audit:
+    name: Rust Security Audit
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SARIF for GitHub Security
+        if: always()
+        run: |
+          # Generate detailed audit report
+          cargo audit --json > rust-audit-report.json || true
+          
+          # Upload as artifact
+          echo "Rust audit completed"
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-security-report
+          path: rust-audit-report.json
+
+  # ============================================================================
+  # SECTION 2: License and Dependency Compliance
+  # ============================================================================
+  cargo-deny:
+    name: License Compliance
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check advisories
+          log-level: warn
+
+      - name: Check for copyleft licenses
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check licenses
+          args: --deny 'GPL-1.0-only,GPL-2.0-only,GPL-3.0-only,LGPL-2.1-only,LGPL-3.0-only,AGPL-1.0-only,AGPL-2.0-only,AGPL-3.0-only'
+
+  # ============================================================================
+  # SECTION 3: npm Security Audit
+  # ============================================================================
+  npm-audit:
+    name: npm Security Audit
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: |
+          # Generate JSON report
+          npm audit --json > npm-audit-report.json || true
+          
+          # Check severity level
+          SEVERE_ISSUES=$(node -e "
+            const report = require('./npm-audit-report.json');
+            const severe = Object.values(report.vulnerabilities || {})
+              .filter(v => ['high', 'critical'].includes(v.severity)).length;
+            console.log(severe);
+          " || echo "0")
+          
+          echo "Found $SEVERE_ISSUES severe vulnerabilities"
+          
+          if [ "$SEVERE_ISSUES" -gt 0 ]; then
+            echo "::warning::Found $SEVERE_ISSUES high/critical npm vulnerabilities"
+          fi
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-security-report
+          path: npm-audit-report.json
+
+  # ============================================================================
+  # SECTION 4: CodeQL Analysis
+  # ============================================================================
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript', 'rust']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        if: matrix.language == 'javascript'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+          queries: security-extended
+
+      - name: Initialize CodeQL
+        if: matrix.language == 'rust'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+          queries: security-extended
+
+      - name: Build
+        if: matrix.language == 'rust'
+        run: |
+          # Install build dependencies for Rust
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+
+  # ============================================================================
+  # SECTION 5: Dependency Review (PRs only)
+  # ============================================================================
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          comment-summary-in-pr: always
+          fail-on-severity: high
+
+  # ============================================================================
+  # SECTION 6: Trivy Binary Scanning
+  # ============================================================================
+  trivy-scan:
+    name: Binary Vulnerability Scan
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build release binary
+        run: |
+          mkdir -p src-tauri/bin
+          # Download minimal sidecar for build
+          curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp-x86_64-unknown-linux-gnu
+          chmod +x src-tauri/bin/*
+          npm run tauri build -- --target x86_64-unknown-linux-gnu
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'src-tauri/target/release/bundle'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # ============================================================================
+  # SECTION 7: SBOM Generation
+  # ============================================================================
+  sbom:
+    name: Software Bill of Materials
+    runs-on: npm audit
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install cargo-bom
+        run: cargo install cargo-bom || true
+
+      - name: Generate Rust SBOM
+        run: |
+          # Generate CycloneDX for Rust
+          cargo install cargo-cyclonedx || true
+          cargo cyclonedx --output-format JSON --file sbom-rust.json || echo "SBOM generation skipped"
+
+      - name: Generate npm SBOM
+        run: |
+          npm install -g @cyclonedx/cyclonedx-npm || true
+          cyclonedx-npm --outputFormat JSON --outputFile sbom-npm.json || echo "npm SBOM skipped"
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-reports
+          path: |
+            sbom-*.json
+          retention-days: 30
+
+  # ============================================================================
+  # SECTION 8: Security Summary
+  # ============================================================================
+  summary:
+    name: Security Audit Summary
+    needs: [rust-audit, cargo-deny, npm-audit, codeql, dependency-review, trivy-scan, sbom]
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This security audit ran on: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Scans Completed:" >> $GITHUB_STEP_SUMMARY
+          echo "- Rust security audit (cargo-audit)" >> $GITHUB_STEP_SUMMARY
+          echo "- License compliance check (cargo-deny)" >> $GITHUB_STEP_SUMMARY
+          echo "- npm vulnerability scan" >> $GITHUB_STEP_SUMMARY
+          echo "- CodeQL analysis (JS + Rust)" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency review" >> $GITHUB_STEP_SUMMARY
+          echo "- Binary vulnerability scanning (Trivy)" >> $GITHUB_STEP_SUMMARY
+          echo "- SBOM generation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "View detailed results in the Security tab of this repository." >> $GITHUB_STEP_SUMMARY

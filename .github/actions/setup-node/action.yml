@@ -1,0 +1,51 @@
+name: "Setup Node.js"
+description: "Install Node.js with npm caching for frontend builds"
+inputs:
+  node-version:
+    description: "Node.js version"
+    required: false
+    default: "20"
+  cache:
+    description: "Use npm cache"
+    required: false
+    default: "npm"
+
+outputs:
+  node-version:
+    description: "The installed Node.js version"
+    value: ${{ steps.version.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      id: setup-node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.cache }}
+
+    - name: Get Node version
+      id: version
+      shell: bash
+      run: |
+        echo "version=${{ steps.setup-node.outputs.node-version }}" >> $GITHUB_OUTPUT
+
+    - name: Cache node_modules
+      if: inputs.cache == 'npm'
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-
+
+    - name: Verify pnpm/yarn not needed
+      shell: bash
+      run: |
+        if [ -f "pnpm-lock.yaml" ]; then
+          echo "WARNING: pnpm detected but using npm"
+        fi
+        if [ -f "yarn.lock" ]; then
+          echo "WARNING: yarn detected but using npm"
+        fi

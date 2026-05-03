@@ -212,27 +212,16 @@ impl DownloadManager {
     }
 
     pub async fn get_video_metadata<R: Runtime>(&self, _app: AppHandle<R>, url: String) -> Result<VideoMetadata, String> {
-        log::info!("[METADATA] Starting analysis for URL: {}", url);
+        log::info!("[METADATA] Starting analysis");
         let max_items = SYSTEM_GUARDRAILS.max_playlist_items.to_string();
-        
-        // Try to find yt-dlp directly from the executable's directory (works in both dev and production)
-        let exe_path = std::env::current_exe()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|e| format!("error: {}", e));
-        log::info!("[METADATA] Executable path: {}", exe_path);
         
         let yt_dlp_path = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.join("yt-dlp").to_string_lossy().to_string()))
             .unwrap_or_else(|| "yt-dlp".to_string());
         
-        log::info!("[METADATA] Using yt-dlp at: {}", yt_dlp_path);
-        
-        // Check if yt-dlp exists
-        if std::path::Path::new(&yt_dlp_path).exists() {
-            log::info!("[METADATA] yt-dlp EXISTS at path");
-        } else {
-            log::warn!("[METADATA] yt-dlp NOT FOUND at path, will search in PATH");
+        if !std::path::Path::new(&yt_dlp_path).exists() {
+            log::warn!("[METADATA] yt-dlp not found in bundle, using PATH");
         }
         
         let mut cmd = tokio::process::Command::new(&yt_dlp_path);
@@ -241,22 +230,22 @@ impl DownloadManager {
         #[cfg(windows)]
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-        let output = cmd.output()
-            .await
-            .map_err(|e| {
-                log::error!("[METADATA] Failed to execute yt-dlp: {}", e);
-                format!("Failed to execute yt-dlp: {}", e)
-            })?;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            cmd.output()
+        )
+        .await
+        .map_err(|_| "Metadata fetch timed out after 60 seconds".to_string())?
+        .map_err(|e| {
+            log::error!("[METADATA] Failed to execute yt-dlp");
+            format!("Failed to execute yt-dlp: {}", e)
+        })?;
         
-        log::info!("[METADATA] Command completed with status: {}", output.status.success());
-        
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let _stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
-        log::info!("[METADATA] stdout: {}", stdout);
-        log::info!("[METADATA] stderr: {}", stderr);
 
         if !output.status.success() {
+            log::warn!("[METADATA] yt-dlp failed: {}", stderr.split('\n').next().unwrap_or("Unknown error"));
             return Err(format!("yt-dlp failed: {}", stderr));
         }
 
@@ -560,8 +549,8 @@ impl DownloadManager {
                     .and_then(|p| p.parent().map(|p| p.join("yt-dlp").to_string_lossy().to_string()))
                     .unwrap_or_else(|| "yt-dlp".to_string());
                 
-                log::info!("[DOWNLOAD] Using yt-dlp at: {}", yt_dlp_path);
-                log::info!("[DOWNLOAD] Using ffmpeg at: {}", ffmpeg_path);
+                log::debug!("[DOWNLOAD] Using yt-dlp at: {}", yt_dlp_path);
+                log::debug!("[DOWNLOAD] Using ffmpeg at: {}", ffmpeg_path);
                 
                 // Build args
                 let mut args = vec![
@@ -618,6 +607,10 @@ impl DownloadManager {
                     }
                 }
                 
+                // CRITICAL: Use -- to separate yt-dlp options from the URL positional argument
+                // This prevents URL injection attacks where a malicious URL starting with '-'
+                // could be interpreted as additional yt-dlp options
+                args.push("--");
                 args.push(&url_inner);
 
                 match app_inner.shell()
@@ -638,11 +631,11 @@ impl DownloadManager {
                                     
                                      if line_str.contains("[download] Destination:") {
                                          let path_part = line_str.split("Destination:").nth(1).unwrap_or("").trim();
-                                         if !path_part.is_empty() {
-                                             log::info!("[DOWNLOAD] Captured destination path: {}", path_part);
-                                             let mut task = task_ref.lock().unwrap();
-                                             task.final_path = Some(std::path::PathBuf::from(path_part));
-                                         }
+if !path_part.is_empty() {
+                                              log::debug!("[DOWNLOAD] Captured destination path");
+                                              let mut task = task_ref.lock().unwrap();
+                                              task.final_path = Some(std::path::PathBuf::from(path_part));
+                                          }
                                      }
  
                                      if line_str.contains("[Merger] Merging formats into") {
@@ -805,9 +798,8 @@ impl DownloadManager {
                                          final_path: final_path.as_ref().map(|p| p.to_string_lossy().to_string()),
                                          version: SYSTEM_GUARDRAILS.ipc_version,
                                       };
-                                      log::info!("[DOWNLOAD] Emitting final status for {}: {:?}, final_path: {:?}", id, status, final_path);
-                                      let emit_result = app_inner.emit("download-progress", final_payload);
-                                      log::info!("[DOWNLOAD] Event emit result: {:?}", emit_result.is_ok());
+                                      log::debug!("[DOWNLOAD] Emitting final status: {:?}", status);
+                                      let _ = app_inner.emit("download-progress", final_payload);
                                      
                                      if let Some(ref path) = cookie_file_path {
                                          let _ = fs::remove_file(path);

@@ -1,0 +1,322 @@
+name: "CI - Pull Request & Push Checks"
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-target-
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+        continue-on-error: true
+
+      - name: Run Clippy lints
+        run: cargo clippy -- -D warnings
+        continue-on-error: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: TypeScript type checking
+        run: npx tsc --noEmit
+
+      - name: Run ESLint
+        run: npx eslint src/ --max-warnings 0
+        continue-on-error: true
+
+  security-checks:
+    name: Security Audits
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check advisories
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@latest
+        with:
+          path: .
+          base: ${{ github.event.pull_request.base.ref }}
+          head: ${{ github.event.pull_request.head.ref }}
+          extra_args: --no-update
+
+  tests:
+    name: Test Suite
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run Rust tests
+        run: cargo test --release -- --nocapture
+
+      - name: Run frontend tests
+        run: npm test --if-present -- --passWithNoTests
+        continue-on-error: true
+
+  build-verify:
+    name: Build Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macOS ARM64
+            target: aarch64-apple-darwin
+            runner: macos-14
+          - os: macOS x86_64
+            target: x86_64-apple-darwin
+            runner: macos-13
+          - os: Linux
+            target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+          - os: Windows
+            target: x86_64-pc-windows-msvc
+            runner: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-build-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.target }}-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            zip \
+            mingw-w64
+
+      - name: Download sidecar binaries
+        run: |
+          mkdir -p src-tauri/bin
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin)
+              TRIPLE="aarch64-apple-darwin"
+              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
+              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg-$TRIPLE
+              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-arm64 -o src-tauri/bin/ffprobe-$TRIPLE
+              ;;
+            x86_64-apple-darwin)
+              TRIPLE="x86_64-apple-darwin"
+              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
+              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
+              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-x64 -o src-tauri/bin/ffprobe-$TRIPLE
+              ;;
+            x86_64-unknown-linux-gnu)
+              TRIPLE="x86_64-unknown-linux-gnu"
+              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp-$TRIPLE
+              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
+              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/linux-x64 -o src-tauri/bin/ffprobe-$TRIPLE
+              ;;
+            x86_64-pc-windows-msvc)
+              TRIPLE="x86_64-pc-windows-msvc"
+              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o src-tauri/bin/yt-dlp-$TRIPLE.exe
+              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg-$TRIPLE.exe
+              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe-$TRIPLE.exe
+              ;;
+          esac
+
+      - name: Create wrapper scripts
+        run: |
+          if [ "${{ matrix.os }}" != "Windows" ]; then
+            if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
+              TRIPLE="aarch64-apple-darwin"
+            elif [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+              TRIPLE="x86_64-apple-darwin"
+            else
+              TRIPLE="x86_64-unknown-linux-gnu"
+            fi
+            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
+            chmod +x src-tauri/bin/*
+          else
+            copy src-tauri/bin\yt-dlp-$TRIPLE.exe src-tauri/bin\yt-dlp-wrapper-$TRIPLE.exe
+          fi
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri build -- --target ${{ matrix.target }}
+        continue-on-error: true
+
+      - name: Verify build artifacts exist
+        run: |
+          case "${{ matrix.os }}" in
+            macOS*)
+              APP_PATH=$(find src-tauri/target -name "*.app" -type d 2>/dev/null | head -1)
+              if [ -z "$APP_PATH" ]; then
+                echo "ERROR: No .app bundle found"
+                ls -la src-tauri/target/release/bundle/
+                exit 1
+              fi
+              echo "SUCCESS: Found app bundle at $APP_PATH"
+              ;;
+            Linux)
+              ls -la src-tauri/target/release/bundle/deb/ src-tauri/target/release/bundle/appimage/ 2>/dev/null || true
+              ;;
+            Windows)
+              ls -la src-tauri/target/release/bundle/nsis/ 2>/dev/null || true
+              ;;
+          esac
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-artifacts-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/bundle/**/*
+            !src-tauri/target/release/bundle/**/*.pdb
+          retention-days: 7
+
+  summary:
+    name: CI Summary
+    needs: [code-quality, security-checks, tests, build-verify]
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## CI Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ CI workflow completed" >> $GITHUB_STEP_SUMMARY

@@ -9,6 +9,7 @@ import {
 import { Download, IDownloadService, DownloadProgressPayload, VideoMetadata } from "@/types/download";
 import { TauriDownloadService } from "@/services/TauriDownloadService";
 import { formatBytes, formatSpeed, formatETA } from "@/utils/formatUtils";
+import { normalizeInputUrl } from "@/utils/urlUtils";
 
 // Use real service
 const api: IDownloadService = new TauriDownloadService();
@@ -23,6 +24,7 @@ interface DownloadState {
     isLoading: boolean;
     error: string | null;
     downloadPath: string | null;
+    listenersInitialized: boolean;
 
     // Analysis State
     isAnalyzing: boolean;
@@ -39,7 +41,7 @@ interface DownloadState {
     };
 
     // Actions
-    initializeListeners: () => Promise<void>;
+    initializeListeners: () => Promise<() => void>;
     setDownloadPath: (path: string) => void;
     setPrefillUrl: (url: string | null) => void;
     updateSettings: (settings: Partial<DownloadState['settings']>) => void;
@@ -64,6 +66,7 @@ export const useDownloadStore = create<DownloadState>()(
             isLoading: false,
             error: null,
             downloadPath: null,
+            listenersInitialized: false,
             isAnalyzing: false,
             analysisCtx: null,
             prefillUrl: null,
@@ -97,6 +100,11 @@ export const useDownloadStore = create<DownloadState>()(
             },
 
             initializeListeners: async () => {
+                if (get().listenersInitialized) {
+                    return () => {};
+                }
+                set({ listenersInitialized: true });
+
                 // Apply theme on init
                 const store = get();
                 const root = window.document.documentElement;
@@ -116,11 +124,18 @@ export const useDownloadStore = create<DownloadState>()(
                     const permission = await requestPermission();
                     hasPermission = permission === 'granted';
                 }
+                const MAX_BUFFER_SIZE = 50;
                 const progressBuffer = new Map<string, DownloadProgressPayload>();
-                let updateTimer: any = null;
+                let updateTimer: ReturnType<typeof setInterval> | null = null;
 
                 const flushUpdates = () => {
-                    if (progressBuffer.size === 0) return;
+                    if (progressBuffer.size === 0) {
+                        if (updateTimer) {
+                            clearInterval(updateTimer);
+                            updateTimer = null;
+                        }
+                        return;
+                    }
                     set((state) => {
                         const newTasks = [...state.tasks];
                         let updated = false;
@@ -145,7 +160,7 @@ export const useDownloadStore = create<DownloadState>()(
                     });
                 };
 
-                await listen<DownloadProgressPayload>("download-progress", (event) => {
+                const unlistenProgress = await listen<DownloadProgressPayload>("download-progress", (event) => {
                     const payload = event.payload;
                     console.log("[DEBUG] Received download-progress event:", payload.id, payload.status, payload.progress);
 
@@ -182,6 +197,10 @@ export const useDownloadStore = create<DownloadState>()(
                         });
                         progressBuffer.delete(payload.id);
                     } else {
+                        if (progressBuffer.size >= MAX_BUFFER_SIZE) {
+                            const firstKey = progressBuffer.keys().next().value;
+                            if (firstKey) progressBuffer.delete(firstKey);
+                        }
                         progressBuffer.set(payload.id, payload);
                         if (!updateTimer) {
                             updateTimer = setInterval(flushUpdates, 200);
@@ -189,9 +208,22 @@ export const useDownloadStore = create<DownloadState>()(
                     }
                 });
 
-                await listen<string>("binary-error", (event) => {
+                const unlistenBinary = await listen<string>("binary-error", (event) => {
                     set({ error: event.payload });
                 });
+
+                return () => {
+                    try {
+                        unlistenProgress();
+                        unlistenBinary();
+                    } finally {
+                        if (updateTimer) {
+                            clearInterval(updateTimer);
+                            updateTimer = null;
+                        }
+                        set({ listenersInitialized: false });
+                    }
+                };
             },
 
             setDownloadPath: (path: string) => {
@@ -199,11 +231,12 @@ export const useDownloadStore = create<DownloadState>()(
             },
 
             analyzeUrl: async (url: string) => {
-                if (!url) return;
+                const normalizedUrl = normalizeInputUrl(url);
+                if (!normalizedUrl) return;
 
                 // Content Restrictions (Safety Guardrail)
                 const BLOCKED_KEYWORDS = ["porn", "adult", "sexual", "xrated", "xvideo", "pornhub", "xvideos", "sex", "nude", "nudity"];
-                const isBlocked = BLOCKED_KEYWORDS.some(k => url.toLowerCase().includes(k));
+                const isBlocked = BLOCKED_KEYWORDS.some(k => normalizedUrl.toLowerCase().includes(k));
 
                 if (isBlocked) {
                     set({
@@ -215,10 +248,10 @@ export const useDownloadStore = create<DownloadState>()(
 
                 set({ isAnalyzing: true, error: null });
                 try {
-                    const metadata = await api.getVideoMetadata(url);
+                    const metadata = await api.getVideoMetadata(normalizedUrl);
                     set({
                         isAnalyzing: false,
-                        analysisCtx: { url, metadata }
+                        analysisCtx: { url: normalizedUrl, metadata }
                     });
                 } catch (e) {
                     console.error(e);
@@ -398,7 +431,7 @@ export const useDownloadStore = create<DownloadState>()(
             partialize: (state) => ({
                 tasks: state.tasks,
                 downloadPath: state.downloadPath,
-                settings: state.settings
+                settings: { ...state.settings, cookies: null }
             }),
         }
     )

@@ -28,16 +28,22 @@ export const useSmartClipboard = () => {
             }
         };
 
-        const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+        let unlisten: (() => void) | null = null;
+
+        getCurrentWindow().onFocusChanged(({ payload: focused }) => {
             if (focused) {
                 checkClipboard();
             }
+        }).then(fn => {
+            unlisten = fn;
         });
 
         checkClipboard();
 
         return () => {
-            unlisten.then(f => f());
+            if (unlisten) {
+                unlisten();
+            }
         };
     }, [lastChecked, clipboardDetection]);
 

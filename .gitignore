@@ -22,4 +22,31 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri binaries - downloaded at build time
 src-tauri/bin/*
+
+# Rust build artifacts
+target/
+src-tauri/target/
+**/target/
+
+# CI Artifacts
+*.dmg
+*.zip
+*.AppImage
+*.deb
+*.rpm
+*.exe
+SHA256SUMS*
+
+# Secrets
+.env
+.env.local
+secrets/
+*.pem
+*.pfx
+*.p12
+
+# OS files
+Thumbs.db

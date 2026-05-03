@@ -19,6 +19,7 @@ import {
     Play
 } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 type Category = "All" | "Social" | "Music" | "Anime" | "Entertainment";
 
@@ -179,7 +180,7 @@ export const PlatformsPage = () => {
                     variant="primary"
                     className="px-8 whitespace-nowrap h-12 shadow-xl shadow-primary/20"
                     onClick={() => {
-                        window.open("https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md", "_blank");
+                        openUrl("https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md");
                     }}
                 >
                     View All 1000+ Sites

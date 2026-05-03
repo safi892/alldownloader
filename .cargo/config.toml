@@ -1,0 +1,42 @@
+# Cargo configuration for cross-platform builds
+# This file is used by GitHub Actions to optimize builds
+
+[profile.release]
+# Panic behavior - abort on panic (smaller binaries)
+panic = "abort"
+
+# Single codegen unit for better optimization
+codegen-units = 1
+
+# Link-time optimization
+lto = "thin"
+
+# Optimize for size
+opt-level = "s"
+
+# Strip debug symbols
+strip = true
+
+# Don't include debug info
+debug = false
+
+[profile.dev]
+# Speed up debug builds
+opt-level = 0
+
+# Incremental compilation
+incremental = true
+
+# Debug info
+debug = true
+
+[net]
+# Use git CLI for better authentication handling
+git-fetch-with-cli = true
+
+# Retry failed downloads
+retry = 3
+
+[http]
+# Check for new Cargo versions
+check-for-update = true

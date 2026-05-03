@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use crate::download::{DownloadTask, DownloadStatus};
 
+const MAX_PERSISTED_TASKS: usize = 100;
+
 #[derive(Serialize, Deserialize)]
 pub struct PersistedTask {
     pub id: String,
@@ -32,18 +34,24 @@ impl PersistenceManager {
     }
 
     pub fn save_tasks(&self, tasks: &HashMap<String, Arc<Mutex<DownloadTask>>>) -> Result<(), String> {
-        let mut persisted_tasks = Vec::new();
+        let mut persisted_tasks: Vec<PersistedTask> = Vec::new();
+        
         for task_arc in tasks.values() {
-            let task = task_arc.lock().unwrap();
-            persisted_tasks.push(PersistedTask {
-                id: task.id.clone(),
-                url: task.url.clone(),
-                status: task.status.clone(),
-                title: task.title.clone(),
-                progress: task.progress,
-                download_dir: task.final_path.as_ref().map(|p| p.to_string_lossy().to_string()),
-            });
+            if let Ok(task) = task_arc.lock() {
+                persisted_tasks.push(PersistedTask {
+                    id: task.id.clone(),
+                    url: task.url.clone(),
+                    status: task.status.clone(),
+                    title: task.title.clone(),
+                    progress: task.progress,
+                    download_dir: task.final_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+                });
+            }
         }
+
+        persisted_tasks.sort_by(|a, b| b.progress.partial_cmp(&a.progress).unwrap_or(std::cmp::Ordering::Equal));
+        
+        persisted_tasks.truncate(MAX_PERSISTED_TASKS);
 
         let data = PersistenceData {
             version: 1,
