@@ -118,6 +118,7 @@ jobs:
       - name: Install Linux dependencies
         if: matrix.os == 'Linux'
         run: |
+          # CI prerequisites: GTK/GDK deps are required by Tauri (gdk-sys) on Linux
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
@@ -134,43 +135,8 @@ jobs:
             gnupg
 
       - name: Download sidecar binaries
-        run: |
-          mkdir -p src-tauri/bin
-          TRIPLE="${{ matrix.target }}"
-
-          case "${{ matrix.sidecar_os }}" in
-            darwin-arm64)
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-arm64 -o src-tauri/bin/ffprobe-$TRIPLE
-              ;;
-            darwin-x64)
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-x64 -o src-tauri/bin/ffprobe-$TRIPLE
-              ;;
-            linux-x64)
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/linux-x64 -o src-tauri/bin/ffprobe-$TRIPLE
-              ;;
-            win32-x64)
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o src-tauri/bin/yt-dlp-$TRIPLE.exe
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg-$TRIPLE.exe
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe-$TRIPLE.exe
-              ;;
-          esac
-
-      - name: Create wrapper scripts
-        run: |
-          if [ "${{ matrix.os }}" != "Windows" ]; then
-            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            chmod +x src-tauri/bin/*
-          else
-            copy src-tauri/bin\yt-dlp-$TRIPLE.exe src-tauri/bin\yt-dlp-wrapper-$TRIPLE.exe
-          fi
+        shell: bash
+        run: ./scripts/ci-sidecars.sh "${{ matrix.target }}"
 
       - name: Install frontend dependencies
         run: npm ci

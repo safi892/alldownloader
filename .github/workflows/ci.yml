@@ -22,6 +22,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          # CI prerequisites: GTK/GDK deps are required by Tauri (gdk-sys) on Linux
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libgdk-pixbuf-2.0-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
+            libatk1.0-dev \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -116,7 +133,7 @@ jobs:
         run: npm audit --audit-level=moderate
 
       - name: Scan for secrets
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.88.3
         with:
           path: .
           base: ${{ github.event.pull_request.base.ref }}
@@ -129,6 +146,22 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libgdk-pixbuf-2.0-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
+            libatk1.0-dev \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -210,6 +243,7 @@ jobs:
       - name: Install Linux dependencies
         if: matrix.os == 'Linux'
         run: |
+          # CI prerequisites: GTK/GDK deps are required by Tauri (gdk-sys) on Linux
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
@@ -232,54 +266,7 @@ jobs:
 
       - name: Download sidecar binaries
         shell: bash
-        run: |
-          mkdir -p src-tauri/bin
-          case "${{ matrix.target }}" in
-            aarch64-apple-darwin)
-              TRIPLE="aarch64-apple-darwin"
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-arm64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-arm64 -o src-tauri/bin/ffprobe-$TRIPLE
-              ;;
-            x86_64-apple-darwin)
-              TRIPLE="x86_64-apple-darwin"
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o src-tauri/bin/yt-dlp-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/darwin-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/darwin-x64 -o src-tauri/bin/ffprobe-$TRIPLE
-              ;;
-            x86_64-unknown-linux-gnu)
-              TRIPLE="x86_64-unknown-linux-gnu"
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o src-tauri/bin/yt-dlp-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/linux-x64 -o src-tauri/bin/ffmpeg-$TRIPLE
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.3.0/linux-x64 -o src-tauri/bin/ffprobe-$TRIPLE
-              ;;
-            x86_64-pc-windows-msvc)
-              TRIPLE="x86_64-pc-windows-msvc"
-              curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o src-tauri/bin/yt-dlp-$TRIPLE.exe
-              curl -sL https://github.com/eugeneware/ffmpeg-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffmpeg-$TRIPLE.exe
-              curl -sL https://github.com/eugeneware/ffprobe-static/releases/download/b5.0.1/win32-x64 -o src-tauri/bin/ffprobe-$TRIPLE.exe
-              ;;
-          esac
-
-      - name: Create wrapper scripts
-        shell: bash
-        run: |
-          # Set TRIPLE based on target
-          case "${{ matrix.target }}" in
-            aarch64-apple-darwin) TRIPLE="aarch64-apple-darwin" ;;
-            x86_64-apple-darwin) TRIPLE="x86_64-apple-darwin" ;;
-            x86_64-unknown-linux-gnu) TRIPLE="x86_64-unknown-linux-gnu" ;;
-            x86_64-pc-windows-msvc) TRIPLE="x86_64-pc-windows-msvc" ;;
-          esac
-
-          if [ "${{ matrix.os }}" = "Windows" ]; then
-            cp "src-tauri/bin/yt-dlp-${TRIPLE}.exe" "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}.exe"
-          else
-            echo '#!/bin/bash' > "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}"
-            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}"
-            echo 'exec "$DIR/yt-dlp" "$@"' >> "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}"
-            chmod +x src-tauri/bin/*
-          fi
+        run: ./scripts/ci-sidecars.sh "${{ matrix.target }}"
 
       - name: Install frontend dependencies
         run: npm ci
