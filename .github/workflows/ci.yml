@@ -116,7 +116,7 @@ jobs:
         run: npm audit --audit-level=moderate
 
       - name: Scan for secrets
-        uses: trufflesecurity/trufflehog@3.0.0
+        uses: trufflesecurity/trufflehog@main
         with:
           path: .
           base: ${{ github.event.pull_request.base.ref }}
@@ -223,7 +223,12 @@ jobs:
             librsvg2-dev \
             patchelf \
             zip \
-            mingw-w64
+            mingw-w64 \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
+            libatk1.0-dev \
+            libgdk-pixbuf-2.0-dev
 
       - name: Download sidecar binaries
         shell: bash
@@ -259,20 +264,21 @@ jobs:
       - name: Create wrapper scripts
         shell: bash
         run: |
-          if [ "${{ matrix.os }}" != "Windows" ]; then
-            if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-              TRIPLE="aarch64-apple-darwin"
-            elif [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
-              TRIPLE="x86_64-apple-darwin"
-            else
-              TRIPLE="x86_64-unknown-linux-gnu"
-            fi
-            echo '#!/bin/bash' > src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
-            chmod +x src-tauri/bin/*
+          # Set TRIPLE based on target
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin) TRIPLE="aarch64-apple-darwin" ;;
+            x86_64-apple-darwin) TRIPLE="x86_64-apple-darwin" ;;
+            x86_64-unknown-linux-gnu) TRIPLE="x86_64-unknown-linux-gnu" ;;
+            x86_64-pc-windows-msvc) TRIPLE="x86_64-pc-windows-msvc" ;;
+          esac
+
+          if [ "${{ matrix.os }}" = "Windows" ]; then
+            cp "src-tauri/bin/yt-dlp-${TRIPLE}.exe" "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}.exe"
           else
-            cp src-tauri/bin/yt-dlp-$TRIPLE.exe src-tauri/bin/yt-dlp-wrapper-$TRIPLE.exe
+            echo '#!/bin/bash' > "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}"
+            echo 'DIR="$(cd "$(dirname "$0")" && pwd)"' >> "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}"
+            echo 'exec "$DIR/yt-dlp" "$@"' >> "src-tauri/bin/yt-dlp-wrapper-${TRIPLE}"
+            chmod +x src-tauri/bin/*
           fi
 
       - name: Install frontend dependencies
