@@ -116,7 +116,7 @@ jobs:
         run: npm audit --audit-level=moderate
 
       - name: Scan for secrets
-        uses: trufflesecurity/trufflehog@latest
+        uses: trufflesecurity/trufflehog@3.0.0
         with:
           path: .
           base: ${{ github.event.pull_request.base.ref }}
@@ -152,6 +152,7 @@ jobs:
         run: npm ci
 
       - name: Run Rust tests
+        working-directory: src-tauri
         run: cargo test --release -- --nocapture
 
       - name: Run frontend tests
@@ -225,6 +226,7 @@ jobs:
             mingw-w64
 
       - name: Download sidecar binaries
+        shell: bash
         run: |
           mkdir -p src-tauri/bin
           case "${{ matrix.target }}" in
@@ -255,6 +257,7 @@ jobs:
           esac
 
       - name: Create wrapper scripts
+        shell: bash
         run: |
           if [ "${{ matrix.os }}" != "Windows" ]; then
             if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
@@ -269,7 +272,7 @@ jobs:
             echo 'exec "$DIR/yt-dlp" "$@"' >> src-tauri/bin/yt-dlp-wrapper-$TRIPLE
             chmod +x src-tauri/bin/*
           else
-            copy src-tauri/bin\yt-dlp-$TRIPLE.exe src-tauri/bin\yt-dlp-wrapper-$TRIPLE.exe
+            cp src-tauri/bin/yt-dlp-$TRIPLE.exe src-tauri/bin/yt-dlp-wrapper-$TRIPLE.exe
           fi
 
       - name: Install frontend dependencies
